@@ -402,16 +402,28 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
         p = op.pricing
         if not p:
             return {"tem_oferta": False}
+        w = op.request.worker
         return {
             "tem_oferta": True,
             "proposal_id": op.proposal_id,
             "estado": op.state.value,
+            # Dados financeiros da oferta
             "liberado": p.liberado,
             "parcela": p.parcela,
             "prazo_meses": p.prazo_meses,
             "taxa_am": p.taxa_am,
             "cet_am": p.cet_am,
             "iof": p.iof,
+            # Dados do trabalhador (vindos da Dataprev via leilão)
+            "worker": {
+                "nome": w.nome,
+                "vinculo": w.vinculo.value,
+                "empregador_cnpj": w.empregador_cnpj,
+                "renda_liquida": w.renda_liquida,
+                "margem_disponivel": w.margem_disponivel,
+                "meses_de_empresa": w.meses_de_empresa,
+                "fgts_saldo": w.fgts_saldo,
+            },
         }
 
     # --- Bot: captura lead ---
