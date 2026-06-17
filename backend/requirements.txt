@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.0
+# httpx só é necessário para testes (TestClient)
+httpx
+psycopg2-binary>=2.9   # driver Postgres (produção)

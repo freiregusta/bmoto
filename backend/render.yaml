@@ -1,0 +1,32 @@
+# render.yaml — Blueprint de deploy (Render).
+# Sobe o backend em Docker + um Postgres gerenciado, já com as envs ligadas.
+# Para Railway/Fly veja as notas no README.
+
+services:
+  - type: web
+    name: originadora-ct
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: originadora-db
+          property: connectionString
+      - key: WEBHOOK_HMAC_SECRET     # segredo p/ validar a assinatura dos webhooks
+        generateValue: true
+      - key: CORS_ORIGINS            # domínio do front no Lovable
+        value: https://seu-app.lovable.app
+      - key: ENTRY_URL              # URL de redirect informada na oferta do leilão
+        value: https://seu-app.lovable.app/formalizacao
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Opcionais (defesa em profundidade):
+      # - key: WEBHOOK_IP_ALLOWLIST
+      #   value: "200.0.0.1,200.0.0.2"
+      # - key: MTLS_REQUIRED_HEADER
+      #   value: "X-Client-Verified=SUCCESS"
+
+databases:
+  - name: originadora-db
+    plan: starter
