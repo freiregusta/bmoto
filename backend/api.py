@@ -76,6 +76,21 @@ class BoolIn(BaseModel):
     event_id: Optional[str] = None
 
 
+
+class LeadIn(BaseModel):
+    nome: str
+    cpf: str
+    produto: str
+    telefone: str = ""
+    observacao: str = ""
+
+class LeadOut(BaseModel):
+    id: str
+    nome: str
+    cpf: str
+    produto: str
+    criado_em: str
+
 class DecisaoOut(BaseModel):
     status: str
     pd: float
@@ -126,6 +141,7 @@ class OriginadoraService:
         self.credit = CreditEngine()
         self.pricing = PricingEngine()
         self.entry_url = entry_url
+        self._leads: list = []
 
     # ---- helpers --------------------------------------------------------
     def _to_domain(self, s: SolicitacaoIn) -> CreditRequest:
@@ -223,6 +239,25 @@ class OriginadoraService:
         self._ev(op, EV.CONTABILIZADA, None)        # booking na IF emissora
         self._ev(op, EV.CEDIDA_FIDC, None)          # cessão ao FIDC (O2D)
         self.repo.save(op); return op
+
+
+    # ---- Busca por CPF (bot) -------------------------------------------
+    def busca_por_cpf(self, cpf: str) -> Optional[Operation]:
+        """Retorna a operação mais recente em estado não-terminal p/ o CPF."""
+        cpf_limpo = cpf.replace('.','').replace('-','').strip()
+        candidatas = [
+            o for o in self.repo.all()
+            if o.request.worker.cpf == cpf_limpo and not o.terminal
+        ]
+        return candidatas[0] if candidatas else None
+
+    # ---- Leads (CP / Moto) ---------------------------------------------
+    def salvar_lead(self, lead: dict) -> dict:
+        import datetime as dt, uuid
+        lead["id"] = str(uuid.uuid4())[:8]
+        lead["criado_em"] = dt.datetime.utcnow().isoformat()
+        self._leads.append(lead)
+        return lead
 
     # ---- consultas ------------------------------------------------------
     def _get(self, proposal_id: str) -> Operation:
@@ -356,6 +391,63 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     @app.get("/operacoes", response_model=List[OperacaoOut], tags=["consulta"])
     def list_ops():
         return [to_out(o) for o in svc.list()]
+
+
+    # --- Bot: busca por CPF ---
+    @app.get("/bot/oferta/{cpf}", tags=["bot"])
+    def bot_oferta(cpf: str):
+        op = svc.busca_por_cpf(cpf)
+        if op is None:
+            return {"tem_oferta": False}
+        p = op.pricing
+        if not p:
+            return {"tem_oferta": False}
+        return {
+            "tem_oferta": True,
+            "proposal_id": op.proposal_id,
+            "estado": op.state.value,
+            "liberado": p.liberado,
+            "parcela": p.parcela,
+            "prazo_meses": p.prazo_meses,
+            "taxa_am": p.taxa_am,
+            "cet_am": p.cet_am,
+            "iof": p.iof,
+        }
+
+    # --- Bot: captura lead ---
+    @app.post("/bot/lead", response_model=LeadOut, tags=["bot"])
+    def bot_lead(body: LeadIn):
+        return svc.salvar_lead(body.model_dump())
+
+    # --- Bot: duvidas via Claude ---
+    @app.post("/bot/duvida", tags=["bot"])
+    async def bot_duvida(request: Request):
+        import httpx, os
+        body = await request.json()
+        pergunta = body.get("pergunta", "")
+        historico = body.get("historico", [])
+        system = (
+            "Você é o assistente do BMoto, uma fintech de crédito para trabalhadores CLT. "
+            "Responda dúvidas sobre consignado privado (Crédito do Trabalhador), "
+            "financiamento de moto e crédito pessoal. "
+            "Seja objetivo, amigável e direto. Máximo de 3 frases por resposta. "
+            "Não invente taxas ou condições — diga que um especialista vai entrar em contato."
+        )
+        msgs = historico + [{"role": "user", "content": pergunta}]
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not key:
+            return {"resposta": "Nossos especialistas estão disponíveis pelo WhatsApp. Posso te ajudar com mais alguma coisa?"}
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 200,
+                      "system": system, "messages": msgs},
+            )
+        data = r.json()
+        texto = data.get("content", [{}])[0].get("text", "Fale com nossos especialistas pelo WhatsApp.")
+        return {"resposta": texto}
 
     return app
 
