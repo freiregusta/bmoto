@@ -121,10 +121,43 @@ def irr(cashflows: List[float], lo: float = -0.9999, hi: float = 5.0,
     return (lo + hi) / 2
 
 
-def cet_mensal(liberado: float, parcela: float, n: int) -> float:
-    """CET mensal: IRR do fluxo [+liberado, -parcela, ..., -parcela]."""
-    cf = [liberado] + [-parcela] * n
-    return irr(cf)
+def cet_anual_res4881(liberado: float, parcela: float, n: int,
+                       dias_por_periodo: int = 30) -> float:
+    """CET anual pela fórmula exata da Resolução CMN 4.881/2020.
+
+    FC0 = Σ FCj / (1 + CET)^(dj/365)
+    onde dj = j × dias_por_periodo (dias corridos até o j-ésimo vencimento).
+    CET expresso em taxa anual (ex: 0.3178 = 31,78% a.a.).
+    """
+    def npv(cet: float) -> float:
+        return liberado - sum(
+            parcela / (1 + cet) ** ((j * dias_por_periodo) / 365)
+            for j in range(1, n + 1)
+        )
+    # NPV(0) < 0 sempre (tomador paga mais do que recebe); busca onde fica = 0
+    lo, hi = 0.0, 50.0  # 0% a 5000% a.a. — cobre qualquer operação real
+    f_lo, f_hi = npv(lo), npv(hi)
+    if f_lo * f_hi > 0:
+        # Fallback: expande o intervalo
+        hi = 500.0
+        f_hi = npv(hi)
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        f_mid = npv(mid)
+        if abs(f_mid) < 1e-8:
+            return mid
+        if f_lo * f_mid < 0:
+            hi, f_hi = mid, f_mid
+        else:
+            lo, f_lo = mid, f_mid
+    return (lo + hi) / 2
+
+
+def cet_mensal(liberado: float, parcela: float, n: int,
+               dias_por_periodo: int = 30) -> float:
+    """CET mensal equivalente ao CET anual da Res. CMN 4.881/2020."""
+    cet_aa = cet_anual_res4881(liberado, parcela, n, dias_por_periodo)
+    return (1 + cet_aa) ** (1 / 12) - 1
 
 
 def cet_anual(cet_m: float) -> float:
