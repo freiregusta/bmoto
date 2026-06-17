@@ -1,6 +1,8 @@
-// src/lib/api.ts — Tipos e chamadas à API do backend BMoto
+// src/lib/api.ts — Integração com a API da esteira BMoto
 
 const API = import.meta.env.VITE_API_URL ?? ''
+
+// ---- Tipos espelhando a API ------------------------------------------------
 
 export type Estado =
   | 'RECEBIDA' | 'PRECIFICANDO' | 'OFERTA_ENVIADA' | 'OFERTA_VENCEDORA'
@@ -61,14 +63,16 @@ export interface Operacao {
   historico: Transicao[]
 }
 
-// Helpers de formatação
+// ---- Formatação ------------------------------------------------------------
+
 export const brl = (v: number) =>
-  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 
 export const pct = (v: number, decimals = 3) =>
   `${(v * 100).toFixed(decimals)}%`
 
-// API calls
+// ---- Calls da esteira (jornada do tomador) ---------------------------------
+
 export const getOperacao = (id: string): Promise<Operacao> =>
   fetch(`${API}/operacoes/${id}`).then(r => {
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -97,3 +101,36 @@ export const assinarCCB = (id: string): Promise<Operacao> =>
     method: 'POST',
     headers: { 'Idempotency-Key': `${id}-ccb` },
   }).then(r => r.json())
+
+// ---- KPIs calculados a partir da lista ------------------------------------
+
+export const ESTADOS_CONCLUIDOS = new Set<Estado>([
+  'DESEMBOLSADA', 'CONTABILIZADA', 'CEDIDA_FIDC',
+])
+export const ESTADOS_RECUSADOS = new Set<Estado>([
+  'LEILAO_PERDIDO', 'REPROVADA_CREDITO', 'INVIAVEL_PRICING',
+  'KYC_REPROVADO', 'AVERBACAO_FALHA', 'PIX_FALHA', 'CANCELADA', 'EXPIRADA',
+])
+
+export function calcKpis(ops: Operacao[]) {
+  const aprovadas = ops.filter(o => !ESTADOS_RECUSADOS.has(o.estado) && o.pricing)
+  const volume = aprovadas.reduce((s, o) => s + (o.pricing?.liberado ?? 0), 0)
+  const taxaMedia = volume
+    ? aprovadas.reduce((s, o) => s + (o.pricing?.taxa_am ?? 0) * (o.pricing?.liberado ?? 0), 0) / volume
+    : 0
+  const cetMedio = volume
+    ? aprovadas.reduce((s, o) => s + (o.pricing?.cet_am ?? 0) * (o.pricing?.liberado ?? 0), 0) / volume
+    : 0
+  const concluidas = ops.filter(o => ESTADOS_CONCLUIDOS.has(o.estado)).length
+  const aprovacao = ops.length ? (aprovadas.length / ops.length) * 100 : 0
+
+  return {
+    originacaoMes: volume,
+    taxaAprovacao: parseFloat(aprovacao.toFixed(1)),
+    inadimplencia: 0,           // virá de endpoint próprio (carteira)
+    ticketMedio: aprovadas.length ? volume / aprovadas.length : 0,
+    taxaMedia,
+    cetMedio,
+    conversao: ops.length ? concluidas / ops.length : 0,
+  }
+}

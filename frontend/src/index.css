@@ -2,8 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', sans-serif;
-  background-color: #ffffff;
-  color: #1a1a1a;
+/* BMoto Design System — Neon Mint on Midnight Navy */
+
+@layer base {
+  :root {
+    /* Core surfaces */
+    --color-background: 210 60% 8%;        /* #0d1b2a */
+    --color-foreground: 150 30% 96%;
+    --color-surface: 158 47% 12%;          /* deep forest mint */
+    --color-surface-2: 158 35% 16%;
+    --color-card: 158 47% 12%;
+    --color-card-foreground: 150 30% 96%;
+    --color-popover: 158 47% 12%;
+    --color-popover-foreground: 150 30% 96%;
+
+    /* Brand */
+    --color-primary: 165 65% 51%;          /* #2dd4a8 */
+    --color-primary-foreground: 210 60% 8%;
+    --color-primary-glow: 152 100% 73%;    /* #73ffb8 */
+    --color-secondary: 158 47% 22%;
+    --color-secondary-foreground: 150 30% 96%;
+
+    --color-accent: 165 65% 51%;
+    --color-accent-foreground: 210 60% 8%;
+    --color-muted: 210 30% 16%;
+    --color-muted-foreground: 210 15% 65%;
+
+    --color-destructive: 0 70% 55%;
+    --color-destructive-foreground: 0 0% 100%;
+    --color-success: 152 70% 55%;
+    --color-warning: 38 95% 60%;
+
+    --color-border: 158 30% 20%;
+    --color-input: 158 30% 20%;
+    --color-ring: 165 65% 51%;
+
+    --radius: 0.875rem;
+
+    --gradient-hero: radial-gradient(80% 60% at 70% 20%, hsl(165 65% 51% / 0.20), transparent 70%),
+                     radial-gradient(60% 50% at 10% 80%, hsl(152 100% 73% / 0.10), transparent 70%);
+    --gradient-mint: linear-gradient(135deg, hsl(165 65% 51%), hsl(152 100% 73%));
+    --shadow-glow: 0 20px 80px -20px hsl(165 65% 51% / 0.45);
+    --shadow-card: 0 10px 40px -20px hsl(210 80% 4% / 0.6);
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { @apply scroll-smooth; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Manrope", system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Sora", system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  ::selection { background: hsl(var(--color-primary) / 0.35); }
+}
+
+@layer components {
+  .container-bm { @apply mx-auto w-full max-w-7xl px-6 lg:px-10; }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground
+           shadow-[var(--shadow-glow)] transition-all hover:brightness-110 hover:-translate-y-0.5;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-full border border-border bg-white/5 px-6 py-3 text-sm font-semibold text-foreground
+           transition-all hover:bg-white/10;
+  }
+
+  .surface {
+    @apply rounded-2xl border border-border bg-card/60 backdrop-blur-sm;
+  }
+
+  .glow-text {
+    background: var(--gradient-mint);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--color-border) / 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--color-border) / 0.4) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
 }
