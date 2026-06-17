@@ -266,12 +266,19 @@ def to_out(op: Operation) -> OperacaoOut:
 # ============================================================================
 def build_service() -> OriginadoraService:
     """Monta o serviço a partir do ambiente.
-    DATABASE_URL definido -> Postgres (produção). Senão -> in-memory (dev)."""
-    dsn = os.environ.get("DATABASE_URL")
-    if dsn:
-        from repository_sql import PostgresRepository
-        repo = PostgresRepository(dsn)
+    DATABASE_URL válida -> Postgres. Senão (ou se falhar) -> in-memory."""
+    dsn = os.environ.get("DATABASE_URL", "").strip()
+    repo: Repository
+    if dsn and dsn.startswith("postgresql"):
+        try:
+            from repository_sql import PostgresRepository
+            repo = PostgresRepository(dsn)
+            print("INFO: Repositório Postgres conectado.")
+        except Exception as e:
+            print(f"WARN: Postgres indisponível ({e}). Usando repositório in-memory.")
+            repo = Repository()
     else:
+        print("INFO: DATABASE_URL não configurada. Usando repositório in-memory.")
         repo = Repository()
     entry = os.environ.get("ENTRY_URL", "https://originadora.exemplo/entrada")
     # TODO produção: trocar MockLeilaoClient por DataprevHttpClient.
