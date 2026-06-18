@@ -91,6 +91,13 @@ class LeadOut(BaseModel):
     produto: str
     criado_em: str
 
+class AvaliacaoIn(BaseModel):
+    cpf: str
+    cnpj: str = ""
+    valor_solicitado: float = 5000.0
+    prazo: int = 24
+
+
 class DecisaoOut(BaseModel):
     status: str
     pd: float
@@ -472,6 +479,80 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
         data = r.json()
         texto = data.get("content", [{}])[0].get("text", "Fale com nossos especialistas pelo WhatsApp.")
         return {"resposta": texto}
+
+
+    # ---- Módulo de Crédito v2 (bureaus + scorecard + decisão) --------------
+    @app.post("/credito/avaliar", tags=["credito"])
+    async def avaliar_credito(body: AvaliacaoIn):
+        """Roda o pipeline completo: bureaus em paralelo → scorecard → decisão."""
+        try:
+            from credit.orchestrator import consultar_bureaus
+            from credit.scorecard import calcular_scores
+            from credit.decision_engine import decidir
+        except ImportError as e:
+            raise HTTPException(500, f"Módulo de crédito não disponível: {e}")
+
+        cpf = body.cpf.replace(".", "").replace("-", "").strip()
+        cnpj = body.cnpj.replace(".", "").replace("/", "").replace("-", "").strip()
+        valor = body.valor_solicitado
+        prazo = body.prazo
+
+        if len(cpf) != 11:
+            raise HTTPException(400, "CPF inválido")
+
+        pkg = await consultar_bureaus(cpf, cnpj=cnpj)
+        resultado = calcular_scores(pkg, valor_solicitado=valor)
+        decisao = decidir(pkg, resultado, valor_solicitado=valor, prazo_solicitado=prazo)
+
+        # Monta resposta para o frontend
+        componentes_tomador = {
+            k: {"valor": round(c.valor_bruto, 1), "peso": c.peso,
+                "contribuicao": round(c.contribuicao, 1), "notas": c.notas}
+            for k, c in resultado.componentes_tomador.items()
+        }
+        componentes_empregador = {
+            k: {"valor": round(c.valor_bruto, 1), "peso": c.peso,
+                "contribuicao": round(c.contribuicao, 1), "notas": c.notas}
+            for k, c in resultado.componentes_empregador.items()
+        }
+
+        return {
+            "decisao": decisao.status.value,
+            "aprovado": decisao.aprovado,
+            "score_tomador": round(resultado.score_tomador, 1),
+            "score_empregador": round(resultado.score_empregador, 1),
+            "score_final": round(resultado.score_final, 1),
+            "pd": round(pkg.pd * 100, 2),
+            "parcela_maxima": round(decisao.parcela_maxima, 2),
+            "valor_maximo": round(decisao.valor_maximo, 2),
+            "prazo_maximo": decisao.prazo_maximo,
+            "motivos": [{"codigo": m.codigo, "descricao": m.descricao, "bureau": m.bureau}
+                        for m in decisao.motivos],
+            "observacoes": decisao.observacoes,
+            "bureaus_indisponiveis": pkg.bureaus_indisponiveis,
+            "componentes_tomador": componentes_tomador,
+            "componentes_empregador": componentes_empregador,
+            # Dados do tomador (para a CCB e exibição)
+            "tomador": {
+                "nome": pkg.dataprev.nome if pkg.dataprev else "",
+                "categoria": pkg.dataprev.categoria.value if pkg.dataprev else "",
+                "meses_empresa": pkg.dataprev.meses_empresa if pkg.dataprev else 0,
+                "renda_bruta": pkg.dataprev.valor_total_vencimentos if pkg.dataprev else 0,
+                "margem_disponivel": pkg.dataprev.valor_margem_disponivel if pkg.dataprev else 0,
+                "pep": pkg.pep,
+                "empregador": pkg.dataprev.empregador.nome if pkg.dataprev and pkg.dataprev.empregador else "",
+            } if pkg.dataprev else None,
+        }
+
+    @app.get("/credito/bureaus", tags=["credito"])
+    async def status_bureaus():
+        """Status dos bureaus configurados (dashboard de observabilidade)."""
+        from credit.config import BUREAUS_ATIVOS, BUREAUS_OBRIGATORIOS, USE_MOCK
+        return {
+            "modo": "mock" if USE_MOCK else "producao",
+            "ativos": sorted(BUREAUS_ATIVOS),
+            "obrigatorios": sorted(BUREAUS_OBRIGATORIOS),
+        }
 
     return app
 
