@@ -98,6 +98,22 @@ class AvaliacaoIn(BaseModel):
     prazo: int = 24
 
 
+class DuvidaIn(BaseModel):
+    pergunta: str
+    # Contexto opcional da oferta (a Mia personaliza quando vem preenchido)
+    produto: Optional[str] = None
+    nome: Optional[str] = None
+    renda: Optional[float] = None
+    margem: Optional[float] = None
+    valor_solicitado: Optional[float] = None
+    prazo_meses: Optional[int] = None
+    parcela: Optional[float] = None
+    taxa_am: Optional[float] = None
+    cet_am: Optional[float] = None
+    seguro_incluso: Optional[bool] = None
+    historico: Optional[List[dict]] = None
+
+
 class DecisaoOut(BaseModel):
     status: str
     pd: float
@@ -438,47 +454,25 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     def bot_lead(body: LeadIn):
         return svc.salvar_lead(body.model_dump())
 
-    # --- Bot: duvidas via Claude ---
+    # --- Bot: duvidas via Claude (delegado ao modulo mia) ---
     @app.post("/bot/duvida", tags=["bot"])
-    async def bot_duvida(request: Request):
-        import httpx, os
-        body = await request.json()
-        pergunta = body.get("pergunta", "")
-        historico = body.get("historico", [])
-        system = (
-            "Você é o assistente do BMoto, uma fintech de crédito para trabalhadores CLT. "
-            "Responda dúvidas sobre consignado privado (Crédito do Trabalhador), "
-            "financiamento de moto e crédito pessoal. "
-            "Seja objetivo, amigável e direto. Máximo de 3 frases por resposta. "
-            "Não invente taxas ou condições — diga que um especialista vai entrar em contato."
+    async def bot_duvida(body: DuvidaIn):
+        from mia import MiaContext, responder_duvida
+        ctx = MiaContext(
+            produto=body.produto,
+            nome=body.nome,
+            renda=body.renda,
+            margem=body.margem,
+            valor_solicitado=body.valor_solicitado,
+            prazo_meses=body.prazo_meses,
+            parcela=body.parcela,
+            taxa_am=body.taxa_am,
+            cet_am=body.cet_am,
+            seguro_incluso=body.seguro_incluso,
+            historico=body.historico or [],
         )
-        msgs = historico + [{"role": "user", "content": pergunta}]
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            # Respostas locais para perguntas frequentes (sem IA)
-            p = pergunta.lower()
-            if any(w in p for w in ["consignado", "crédito do trabalhador", "folha", "clt"]):
-                return {"resposta": "O Consignado Privado (Crédito do Trabalhador) é um empréstimo descontado direto na sua folha de pagamento. As taxas são menores porque o risco é menor — o desconto é automático. Para CLT, o prazo pode chegar a 96 meses e não compromete seu FGTS."}
-            if any(w in p for w in ["taxa", "juros", "cet", "quanto"]):
-                return {"resposta": "As taxas do consignado privado partem de 1,99% a.m. — bem abaixo do crédito pessoal comum. O CET (Custo Efetivo Total) inclui juros + IOF e é calculado pela Resolução CMN 4.881/2020."}
-            if any(w in p for w in ["seguro", "prestamista", "demissão", "invalidez"]):
-                return {"resposta": "O seguro prestamista quita o saldo devedor em caso de demissão sem justa causa, morte ou invalidez permanente. O prêmio é de 5% do valor financiado, limitado a R$ 299. É opcional — você pode remover na proposta."}
-            if any(w in p for w in ["prazo", "parcela", "meses", "anos"]):
-                return {"resposta": "Os prazos vão de 12 a 96 meses. A parcela é descontada automaticamente da folha de pagamento — você não precisa se lembrar de pagar. O limite é de 40% da sua renda líquida."}
-            if any(w in p for w in ["documento", "doc", "rg", "cnh", "comprovante"]):
-                return {"resposta": "Precisamos de RG ou CNH (frente e verso) e uma selfie para verificação de identidade. Todo o processo é feito aqui no chat mesmo — rápido e seguro."}
-            return {"resposta": "Boa pergunta! Para te dar uma resposta precisa, vou acionar um especialista. Pode deixar seu telefone que entramos em contato em até 2 horas? 😊"}
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": key, "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 200,
-                      "system": system, "messages": msgs},
-            )
-        data = r.json()
-        texto = data.get("content", [{}])[0].get("text", "Fale com nossos especialistas pelo WhatsApp.")
-        return {"resposta": texto}
+        return await responder_duvida(body.pergunta, ctx)
+        # -> {"resposta": "...", "fonte": "ia" | "faq" | "fallback"}
 
 
     # ---- Módulo de Crédito v2 (bureaus + scorecard + decisão) --------------
