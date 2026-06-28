@@ -67,7 +67,7 @@ class PricingEngine:
             principal_fin = finance.principal_from_pmt(parcela_cap, taxa, n)
             for _ in range(25):
                 iof = finance.iof_credito_pf(principal_fin, taxa, n, self.p.dias_por_periodo)
-                seguro = self.p.seguro_pct * principal_fin
+                seguro = min(self.p.seguro_pct * principal_fin, self.p.seguro_cap)
                 liberado = principal_fin - iof - seguro
                 # reprojeta principal para manter parcela = cap
                 principal_fin = finance.principal_from_pmt(parcela_cap, taxa, n)
@@ -80,7 +80,7 @@ class PricingEngine:
             principal_fin = liberado
             for _ in range(25):
                 iof = finance.iof_credito_pf(principal_fin, taxa, n, self.p.dias_por_periodo)
-                seguro = self.p.seguro_pct * principal_fin
+                seguro = min(self.p.seguro_pct * principal_fin, self.p.seguro_cap)
                 novo = liberado + iof + seguro
                 if abs(novo - principal_fin) < 0.01:
                     principal_fin = novo
@@ -89,7 +89,7 @@ class PricingEngine:
             parcela = finance.pmt(principal_fin, taxa, n)
 
         iof = finance.iof_credito_pf(principal_fin, taxa, n, self.p.dias_por_periodo)
-        seguro = self.p.seguro_pct * principal_fin
+        seguro = min(self.p.seguro_pct * principal_fin, self.p.seguro_cap)
         liberado = principal_fin - iof - seguro
         parcela = finance.pmt(principal_fin, taxa, n)
 

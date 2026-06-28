@@ -66,7 +66,9 @@ class PricingParams:
     taxa_min_am: float = 0.012
     taxa_max_am: float = 0.035
     # Seguro prestamista financiado (% sobre o principal). 0 desliga.
-    seguro_pct: float = 0.0
+    seguro_pct: float = 0.05             # 5% sobre o principal financiado
+    # Teto absoluto do prêmio de seguro prestamista (R$).
+    seguro_cap: float = 299.0
     # Teto regulatório (Resolução do Comitê Gestor, abr/2026):
     #   CET mensal não pode exceder a taxa de juros mensal em mais de 1 p.p.
     cet_spread_max_pp: float = 0.01      # 1 ponto percentual
