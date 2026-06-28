@@ -349,10 +349,16 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
                   version="0.1.0",
                   description="Esteira de consignado privado (leilão Dataprev).")
 
-    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
-    if origins:
-        app.add_middleware(CORSMiddleware, allow_origins=origins,
-                           allow_methods=["*"], allow_headers=["*"])
+    # Origens liberadas: defaults de produção + extras via env (CORS_ORIGINS).
+    # Garante que o site nunca caia silenciosamente por env esquecida.
+    _default_origins = [
+        "https://bmoto.com.br",
+        "https://www.bmoto.com.br",
+    ]
+    _env_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+    origins = sorted(set(_default_origins) | set(_env_origins))
+    app.add_middleware(CORSMiddleware, allow_origins=origins,
+                       allow_methods=["*"], allow_headers=["*"])
 
     # Guards aplicados só aos webhooks (server-to-server). Bot/consulta ficam fora.
     WEBHOOK_GUARDS = [Depends(mtls_guard), Depends(hmac_guard), Depends(ip_guard)]
