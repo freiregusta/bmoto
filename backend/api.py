@@ -18,7 +18,7 @@ Docs/contrato (o que o Lovable consome):
     http://localhost:8000/docs   e   http://localhost:8000/openapi.json
 """
 from __future__ import annotations
-from typing import Optional, List
+from typing import Optional, List, Dict
 from enum import Enum
 
 import os
@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field
 from models import (WorkerData, CreditRequest, Vinculo, AuctionStatus)
 from credit_engine import CreditEngine
 from pricing_engine import PricingEngine
+from contabilidade import Razao, lancamento_desembolso
+from fidc import ParametrosCessao, ceder_operacao, ResultadoCessao, LoteCessao
 from dataprev_client import LeilaoClient, MockLeilaoClient
 from state_machine import (Repository, Operation, Event, EV, S, apply,
                            IllegalTransition)
@@ -165,6 +167,9 @@ class OriginadoraService:
         self.pricing = PricingEngine()
         self.entry_url = entry_url
         self._leads: list = []
+        self.razao = Razao()
+        self.params_cessao = ParametrosCessao()
+        self.cessoes: Dict[str, ResultadoCessao] = {}
 
     # ---- helpers --------------------------------------------------------
     def _to_domain(self, s: SolicitacaoIn) -> CreditRequest:
@@ -259,9 +264,32 @@ class OriginadoraService:
             self._ev(op, EV.PIX_FALHA, b.event_id)
             self.repo.save(op); return op
         self._ev(op, EV.PIX_OK, b.event_id)         # -> DESEMBOLSADA
+        self._contabiliza_desembolso(op)
         self._ev(op, EV.CONTABILIZADA, None)        # booking na IF emissora
+        self._cede_ao_fidc(op)
         self._ev(op, EV.CEDIDA_FIDC, None)          # cessão ao FIDC (O2D)
         self.repo.save(op); return op
+
+    # ---- Contabilização (booking + cessão ao FIDC) ----------------------
+    def _contabiliza_desembolso(self, op: Operation) -> None:
+        pr = op.pricing
+        if pr is None:
+            return
+        self.razao.registrar(lancamento_desembolso(
+            op.proposal_id, liberado=pr.liberado,
+            principal_financiado=pr.principal_financiado,
+            iof=pr.iof, seguro=pr.seguro))
+
+    def _cede_ao_fidc(self, op: Operation) -> None:
+        pr = op.pricing
+        if pr is None:
+            return
+        res, _ = ceder_operacao(
+            parcela=pr.parcela, prazo_meses=pr.prazo_meses,
+            principal_financiado=pr.principal_financiado, taxa_op_am=pr.taxa_am,
+            proposal_id=op.proposal_id, razao=self.razao,
+            params=self.params_cessao)
+        self.cessoes[op.proposal_id] = res
 
 
     # ---- Busca por CPF (bot) -------------------------------------------
@@ -420,6 +448,47 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     @app.get("/operacoes", response_model=List[OperacaoOut], tags=["consulta"])
     def list_ops():
         return [to_out(o) for o in svc.list()]
+
+    # --- Contabilidade / FIDC (dashboard) ---
+    @app.get("/contabil/balancete", tags=["contabil"])
+    def balancete():
+        contas = [v for v in svc.razao.balancete().values() if abs(v["saldo"]) > 0.005]
+        return {
+            "qtd_lancamentos": len(svc.razao.lancamentos),
+            "partida_dobrada_ok": svc.razao.conferencia(),
+            "contas": contas,
+        }
+
+    @app.get("/contabil/lancamentos", tags=["contabil"])
+    def lancamentos(limit: int = 50):
+        ls = svc.razao.lancamentos[-limit:]
+        return [{
+            "data": l.data.isoformat(),
+            "evento": l.evento,
+            "proposal_id": l.proposal_id,
+            "historico": l.historico,
+            "partidas": [
+                {"conta": p.conta, "debito": p.debito, "credito": p.credito}
+                for p in l.partidas
+            ],
+        } for l in ls]
+
+    @app.get("/fidc/lote", tags=["contabil"])
+    def fidc_lote():
+        lote = LoteCessao(params=svc.params_cessao)
+        for res in svc.cessoes.values():
+            lote.adicionar(res)
+        return {
+            **lote.resumo(),
+            "operacoes": [{
+                "proposal_id": r.proposal_id,
+                "valor_face": r.valor_face,
+                "preco_cessao": r.preco_cessao,
+                "resultado": r.resultado,
+                "taxa_op_am": r.taxa_op_am,
+                "taxa_cessao_am": r.taxa_cessao_am,
+            } for r in svc.cessoes.values()],
+        }
 
 
     # --- Bot: busca por CPF ---
