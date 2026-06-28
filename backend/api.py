@@ -31,6 +31,7 @@ from credit_engine import CreditEngine
 from pricing_engine import PricingEngine
 from contabilidade import Razao, lancamento_desembolso
 from fidc import ParametrosCessao, ceder_operacao, ResultadoCessao, LoteCessao
+from bureau_pricing import pd_por_cpf
 from dataprev_client import LeilaoClient, MockLeilaoClient
 from state_machine import (Repository, Operation, Event, EV, S, apply,
                            IllegalTransition)
@@ -204,6 +205,13 @@ class OriginadoraService:
             self._ev(op, EV.CREDITO_REPROVADO, None, motivos=dec.reasons)
             self.repo.save(op); return op
         self._ev(op, EV.CREDITO_APROVADO, None)
+
+        # Refina o PD com o scorecard de bureaus (Tomador+Empregador x FGTS).
+        # Graceful: mantém o PD simples se os bureaus estiverem indisponíveis.
+        pd_rico = pd_por_cpf(req.worker.cpf, req.worker.empregador_cnpj,
+                             req.valor_solicitado)
+        if pd_rico is not None:
+            dec.pd = pd_rico
 
         pr = self.pricing.price(req, dec)
         op.pricing = pr
