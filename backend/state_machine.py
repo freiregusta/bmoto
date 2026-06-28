@@ -21,6 +21,8 @@ from models import (CreditRequest, CreditDecision, PricingResult, Proposal,
 from credit_engine import CreditEngine
 from pricing_engine import PricingEngine
 from dataprev_client import LeilaoClient
+from contabilidade import Razao, lancamento_desembolso
+from fidc import ParametrosCessao, ceder_operacao, ResultadoCessao
 
 
 # ----------------------------------------------------------------------------- 
@@ -223,17 +225,46 @@ class Esteira:
     def __init__(self, client: LeilaoClient, repo: Optional[Repository] = None,
                  credit: Optional[CreditEngine] = None,
                  pricing: Optional[PricingEngine] = None,
-                 entry_url: str = "https://originadora.exemplo/entrada"):
+                 entry_url: str = "https://originadora.exemplo/entrada",
+                 razao: Optional[Razao] = None,
+                 params_cessao: Optional[ParametrosCessao] = None):
         self.client = client
         self.repo = repo or Repository()
         self.credit = credit or CreditEngine()
         self.pricing = pricing or PricingEngine()
         self.entry_url = entry_url
+        self.razao = razao or Razao()
+        self.params_cessao = params_cessao or ParametrosCessao()
+        self.cessoes: Dict[str, ResultadoCessao] = {}
         self._seq = 0
 
     def _eid(self, prefix: str) -> str:
         self._seq += 1
         return f"{prefix}-{self._seq}"
+
+    # ---- Contabilização -------------------------------------------------
+    def _contabiliza_desembolso(self, op: Operation) -> None:
+        """Reconhece a carteira a receber contra caixa, IOF e seguro."""
+        pr = op.pricing
+        if pr is None:
+            return
+        lanc = lancamento_desembolso(
+            op.proposal_id, liberado=pr.liberado,
+            principal_financiado=pr.principal_financiado,
+            iof=pr.iof, seguro=pr.seguro)
+        self.razao.registrar(lanc)
+
+    def _cede_ao_fidc(self, op: Operation) -> None:
+        """Cede o recebível ao FIDC: baixa a carteira e apura o resultado."""
+        pr = op.pricing
+        if pr is None:
+            return
+        res, _ = ceder_operacao(
+            parcela=pr.parcela, prazo_meses=pr.prazo_meses,
+            principal_financiado=pr.principal_financiado, taxa_op_am=pr.taxa_am,
+            proposal_id=op.proposal_id, razao=self.razao,
+            params=self.params_cessao)
+        self.cessoes[op.proposal_id] = res
 
     # ---- Ingestão (webhook de distribuição do leilão) -------------------
     def ingerir(self, req: CreditRequest) -> Operation:
@@ -307,9 +338,11 @@ class Esteira:
                                 self._eid("pix")))
 
             elif st == S.DESEMBOLSADA:
+                self._contabiliza_desembolso(op)
                 apply(op, Event(EV.CONTABILIZADA, self._eid("book")))
 
             elif st == S.CONTABILIZADA:
+                self._cede_ao_fidc(op)
                 apply(op, Event(EV.CEDIDA_FIDC, self._eid("fidc")))
 
             else:
