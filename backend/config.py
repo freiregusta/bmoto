@@ -6,7 +6,7 @@ Crédito do Trabalhador em 2026; substitua pelos números do Fibra / da sua asse
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
 
 
 # ----------------------------------------------------------------------------- 
@@ -59,7 +59,7 @@ class PricingParams:
     tax_am: float = 0.0010
     # Perda esperada: se definida, entra DIRETO como premissa (vida do contrato,
     # % do principal) e é espalhada no prazo. Se None, é derivada de PD×LGD.
-    el_lifetime_pct: float = 0.10        # 10% de perda esperada (premissa)
+    el_lifetime_pct: Optional[float] = None   # None = perda derivada de PD x LGD (risk-based)
     # Perda esperada (EL = PD×LGD) é convertida em add-on mensal pelo motor.
     lgd: float = 0.55                    # severidade após garantia FGTS (path derivado)
     # Piso e teto de taxa nominal mensal ofertável.
