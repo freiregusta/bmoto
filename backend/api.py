@@ -89,6 +89,15 @@ class LeadIn(BaseModel):
     telefone: str = ""
     observacao: str = ""
 
+class ConvenioIn(BaseModel):
+    empresa: str
+    cnpj: str = ""
+    nome_contato: str
+    email: str = ""
+    telefone: str = ""
+    num_funcionarios: str = ""
+    observacao: str = ""
+
 class LeadOut(BaseModel):
     id: str
     nome: str
@@ -544,6 +553,15 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     @app.post("/bot/lead", response_model=LeadOut, tags=["bot"])
     def bot_lead(body: LeadIn):
         return svc.salvar_lead(body.model_dump())
+
+    # --- Empresas: interesse em convênio (pipeline B2B pré-licença) ---
+    @app.post("/empresas/interesse", tags=["empresas"])
+    def empresa_interesse(body: ConvenioIn):
+        d = body.model_dump()
+        d["produto"] = "convenio_empresa"
+        d["nome"] = d.pop("nome_contato")
+        d["cpf"] = ""
+        return svc.salvar_lead(d)
 
     # --- Bot: duvidas via Claude (delegado ao modulo mia) ---
     @app.post("/bot/duvida", tags=["bot"])
