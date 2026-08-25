@@ -26,6 +26,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 from typing import Dict, List, Optional
+from dataclasses import asdict
+
+from persistencia import JsonStore, hidratar
 
 
 class StatusRepasse(str, Enum):
@@ -78,6 +81,7 @@ class MonitorRepasses:
     # ------------------------------------------------------------------ setup
     def registrar_esperada(self, p: ParcelaEsperada) -> None:
         self.parcelas.append(p)
+        _persistir(p)
 
     def conciliar(self, proposal_id: str, competencia: str, valor: float) -> None:
         for p in self.parcelas:
@@ -88,6 +92,7 @@ class MonitorRepasses:
                     p.causa = None
                 else:
                     p.status = StatusRepasse.RECEBIDO_PARCIAL
+                _persistir(p)
                 return
         raise KeyError(f"Parcela {proposal_id}/{competencia} não encontrada")
 
@@ -105,6 +110,7 @@ class MonitorRepasses:
                 p.dias_atraso = max(0, (hoje - venc).days)
                 if p.causa is None:
                     p.causa = CausaProvavel.INDETERMINADA
+                _persistir(p)
                 n += 1
         return n
 
@@ -113,6 +119,7 @@ class MonitorRepasses:
         for p in self.parcelas:
             if p.proposal_id == proposal_id and p.competencia == competencia:
                 p.causa = causa
+                _persistir(p)
                 return
         raise KeyError(f"Parcela {proposal_id}/{competencia} não encontrada")
 
@@ -204,5 +211,30 @@ class MonitorRepasses:
         return acoes
 
 
-# Instância global simples (mesmo padrão do restante do backend in-memory)
-MONITOR = MonitorRepasses()
+_STORE_REP = JsonStore("repasse_parcelas")
+
+
+def _chave(p: ParcelaEsperada) -> str:
+    return f"{p.proposal_id}|{p.competencia}"
+
+
+def _construir(d: dict) -> ParcelaEsperada:
+    d = dict(d)
+    d["status"] = StatusRepasse(d.get("status", "pendente"))
+    if d.get("causa"):
+        d["causa"] = CausaProvavel(d["causa"])
+    return ParcelaEsperada(**d)
+
+
+def _persistir(p: ParcelaEsperada) -> None:
+    _STORE_REP.put(_chave(p), asdict(p))
+
+
+def _carregar_monitor() -> MonitorRepasses:
+    m = MonitorRepasses()
+    m.parcelas = list(hidratar(_STORE_REP, _construir).values())
+    return m
+
+
+# Instância global hidratada do banco (Postgres em prod, SQLite em dev)
+MONITOR = _carregar_monitor()

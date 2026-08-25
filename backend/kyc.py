@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
+from dataclasses import asdict
+from persistencia import JsonStore, hidratar
 
 
 @dataclass
@@ -109,8 +111,9 @@ def get_provider() -> KYCProvider:
     return MockKYCProvider()
 
 
-# Guarda o último resultado por operação (auditoria; persistência SQL depois)
-RESULTADOS: dict[str, ResultadoKYC] = {}
+# Último resultado por operação (auditoria) — persistente
+_STORE_KYC = JsonStore("kyc_resultados")
+RESULTADOS: dict[str, ResultadoKYC] = hidratar(_STORE_KYC, lambda d: ResultadoKYC(**d))
 
 
 async def executar_kyc(proposal_id: str, *, cpf: str, nome: str,
@@ -120,4 +123,5 @@ async def executar_kyc(proposal_id: str, *, cpf: str, nome: str,
         cpf=cpf, nome=nome, selfie_b64=selfie_b64,
         doc_frente_b64=doc_frente_b64, doc_verso_b64=doc_verso_b64)
     RESULTADOS[proposal_id] = res
+    _STORE_KYC.put(proposal_id, asdict(res))
     return res

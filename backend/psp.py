@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
+from dataclasses import asdict
+from persistencia import JsonStore, hidratar
 
 
 @dataclass
@@ -104,8 +106,9 @@ def get_provider() -> PixProvider:
     return MockPixProvider()
 
 
-# Registro de ordens por operação (idempotência + conciliação)
-ORDENS: dict[str, OrdemPix] = {}
+# Registro de ordens por operação (idempotência + conciliação) — persistente
+_STORE_PIX = JsonStore("ordens_pix")
+ORDENS: dict[str, OrdemPix] = hidratar(_STORE_PIX, lambda d: OrdemPix(**d))
 
 
 async def desembolsar(proposal_id: str, valor: float,
@@ -123,6 +126,7 @@ async def desembolsar(proposal_id: str, valor: float,
     )
     ordem = await get_provider().enviar(ordem)
     ORDENS[proposal_id] = ordem
+    _STORE_PIX.put(proposal_id, asdict(ordem))
     return ordem
 
 
@@ -134,4 +138,5 @@ def confirmar(proposal_id: str, ok: bool, erro: str = "") -> Optional[OrdemPix]:
     ordem.status = "CONFIRMADA" if ok else "FALHOU"
     if erro:
         ordem.erro = erro
+    _STORE_PIX.put(proposal_id, asdict(ordem))
     return ordem

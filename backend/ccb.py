@@ -31,6 +31,8 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 import finance
+from dataclasses import asdict
+from persistencia import JsonStore, hidratar
 
 EMITENTE_PADRAO = os.getenv("CCB_CREDORA", "BMoto Originadora — em constituição")
 PRACA_PAGAMENTO = os.getenv("CCB_PRACA", "São Paulo/SP")
@@ -68,16 +70,31 @@ class CartorioCCB:
 
     def registrar(self, r: RegistroCCB) -> None:
         self.registros[r.proposal_id] = r
+        from persistencia import JsonStore
+        JsonStore("ccbs").put(r.proposal_id, asdict(r))
 
     def marcar_assinada(self, proposal_id: str, evidencia: str = "") -> RegistroCCB:
         r = self.registros[proposal_id]
         r.status = "ASSINADA"
         r.assinada_em = dt.datetime.utcnow().isoformat()
         r.assinatura_evidencia = evidencia or None
+        JsonStore("ccbs").put(proposal_id, asdict(r))
         return r
 
 
-CARTORIO = CartorioCCB()
+_STORE_CCB = JsonStore("ccbs")
+
+
+def _carregar_cartorio() -> CartorioCCB:
+    c = CartorioCCB()
+    c.registros = hidratar(_STORE_CCB, lambda d: RegistroCCB(**d))
+    seqs = [int(r.numero.split("-")[-1]) for r in c.registros.values()
+            if r.numero.split("-")[1] == str(__import__("datetime").date.today().year)]
+    c._seq = max(seqs) if seqs else 0
+    return c
+
+
+CARTORIO = _carregar_cartorio()
 
 
 # ---------------------------------------------------------------------------
