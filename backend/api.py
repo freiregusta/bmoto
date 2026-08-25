@@ -32,6 +32,7 @@ from pricing_engine import PricingEngine
 from contabilidade import Razao, lancamento_desembolso
 from fidc import ParametrosCessao, ceder_operacao, ResultadoCessao, LoteCessao
 from bureau_pricing import pd_por_cpf
+from agents.orchestrator import router as agents_router, set_service as agents_set_service
 from dataprev_client import LeilaoClient, MockLeilaoClient
 from state_machine import (Repository, Operation, Event, EV, S, apply,
                            IllegalTransition)
@@ -384,6 +385,10 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     app = FastAPI(title="Originadora — Crédito do Trabalhador",
                   version="0.1.0",
                   description="Esteira de consignado privado (leilão Dataprev).")
+
+    # Equipe de agentes internos (Rita: risco, Pedro: pricing)
+    agents_set_service(svc)
+    app.include_router(agents_router)
 
     # Origens liberadas: defaults de produção + extras via env (CORS_ORIGINS).
     # Garante que o site nunca caia silenciosamente por env esquecida.
