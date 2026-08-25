@@ -28,8 +28,13 @@ from fastapi.responses import PlainTextResponse
 
 from repasse_monitor import MONITOR, StatusRepasse
 
+import os
+
 RUBRICA_CONSIGNADO = "9253"
-CODIGO_IF_FIBRA = "224"  # Banco Fibra (liquidante) — confirmar código FEBRABAN
+# Código da instituição consignatária no arquivo da folha. Genérico até a
+# licença de operação definir como a IF aparece no Portal do Empregador
+# (COMPE, CNPJ ou ISPB). Configurável sem deploy via env CODIGO_IF.
+CODIGO_IF = os.getenv("CODIGO_IF", "A_DEFINIR")
 
 
 def _so_digitos(s: str) -> str:
@@ -90,7 +95,7 @@ def arquivo_folha(cnpj: str, comp: str) -> str:
         w.writerow([
             _cpf_formatado(cpf) if cpf else "PREENCHER",
             RUBRICA_CONSIGNADO,
-            CODIGO_IF_FIBRA,
+            CODIGO_IF,
             f"{p.valor_esperado:.2f}".replace(".", ","),
             p.numero_parcela,
             p.competencia,
