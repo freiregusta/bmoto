@@ -104,6 +104,7 @@ class AvaliacaoIn(BaseModel):
 
 
 class DuvidaIn(BaseModel):
+    perfil: Optional[str] = None  # 'cliente' (default) ou 'rh'
     pergunta: str
     # Contexto opcional da oferta (a Mia personaliza quando vem preenchido)
     produto: Optional[str] = None
@@ -549,6 +550,7 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     async def bot_duvida(body: DuvidaIn):
         from mia import MiaContext, responder_duvida
         ctx = MiaContext(
+            perfil=body.perfil,
             produto=body.produto,
             nome=body.nome,
             renda=body.renda,

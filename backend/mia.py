@@ -38,6 +38,7 @@ PRODUTOS = {
 @dataclass
 class MiaContext:
     produto: Optional[str] = None
+    perfil: Optional[str] = None   # 'cliente' (default) ou 'rh'
     nome: Optional[str] = None
     renda: Optional[float] = None
     margem: Optional[float] = None
@@ -112,8 +113,33 @@ Use os dados do cliente abaixo para personalizar quando fizer sentido.
 """
 
 
+RH_ADDON = """
+
+=== MODO RH / EMPREGADOR ===
+Você está falando com um profissional de RH/DP de uma empresa empregadora,
+NÃO com um tomador de crédito. Ajuste o tom: linguagem de departamento
+pessoal, objetiva, sem ofertas de crédito.
+Você domina o fluxo do repasse do Crédito do Trabalhador:
+1. Notificação chega pelo DET (Domicílio Eletrônico Trabalhista).
+2. Baixar o arquivo de parcelas (Portal do Empregador ou Portal RH BMoto,
+   em bmoto.com.br/portal-rh — já sai com rubrica e CPFs formatados).
+3. Escriturar no eSocial: rubrica 9253 no evento S-1200; conferir o S-5003.
+4. Gerar e pagar a guia no FGTS Digital até o vencimento.
+Regras-chave: competência definida pela janela de averbação de 21 do mês
+anterior a 20 do corrente (Portaria MTE 435/2025, art. 24); retenção sem
+repasse gera regularização com juros/encargos (art. 28 §3º) e multa de 30%
+do valor retido + Termo de Débito Salarial (Lei 15.179/2025, art. 3º) —
+informe isso como orientação preventiva, nunca como ameaça.
+Erros comuns a verificar: CPF sem zeros à esquerda, código de IF errado,
+competência trocada, guia do FGTS Digital esquecida após escriturar.
+Se não souber responder com segurança, direcione ao Portal RH BMoto."""
+
+
 def build_system_prompt(ctx: MiaContext) -> str:
-    return f"{SYSTEM_BASE}\n\n=== DADOS DO CLIENTE NESTA SESSÃO ===\n{ctx.resumo()}"
+    base = f"{SYSTEM_BASE}\n\n=== DADOS DO CLIENTE NESTA SESSÃO ===\n{ctx.resumo()}"
+    if (ctx.perfil or "").lower() == "rh":
+        base += RH_ADDON
+    return base
 
 
 # --- FAQ local (fallback) ---------------------------------------------------
@@ -145,6 +171,22 @@ FAQ: list[tuple[list[str], str]] = [
     (["quitar", "antecipar", "pagar antes", "quitação"],
      "Você pode quitar antecipadamente com desconto proporcional dos juros "
      "futuros, conforme as regras do Banco Central."),
+    (["rubrica", "9253", "escriturar", "escrituração", "escrituracao", "s-1200", "esocial"],
+     "RH: o desconto do Crédito do Trabalhador é lançado no eSocial pela rubrica "
+     "9253, no evento S-1200. Depois confira o S-5003 e gere a guia no FGTS "
+     "Digital. O Portal RH BMoto (bmoto.com.br/portal-rh) entrega o arquivo pronto."),
+    (["det", "domicílio eletrônico", "domicilio eletronico", "portal do empregador", "notificação de consignado", "notificacao de consignado"],
+     "RH: a notificação de novos contratos chega pelo DET. No Portal do Empregador "
+     "você baixa os detalhes de cada contrato; no Portal RH BMoto o arquivo já vem "
+     "no formato da folha."),
+    (["fgts digital", "guia", "recolhimento", "repasse"],
+     "RH: após escriturar a rubrica 9253, gere e pague a guia no FGTS Digital até o "
+     "vencimento — o repasse à instituição é automático. Reter sem repassar gera "
+     "juros/encargos e multa de 30% (Lei 15.179/2025)."),
+    (["competência", "competencia", "janela", "21", "dia 20", "corte"],
+     "RH: a competência segue a janela de averbação de 21 do mês anterior a 20 do "
+     "corrente (Portaria MTE 435/2025). Contrato averbado nessa janela desconta na "
+     "folha da competência seguinte."),
     (["margem", "quanto posso pegar", "limite"],
      "O valor máximo depende da sua margem consignável disponível. A consulta é "
      "automática e o limite aparece na sua simulação."),

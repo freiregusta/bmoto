@@ -280,14 +280,44 @@ def _score_emp_setorial(emp: Optional[DadosEmpregadorBureau]) -> ComponenteScore
                            bruto * CFG.peso_emp_setorial, notas)
 
 
+def _fator_repasse(cnpj: Optional[str]) -> tuple[float, str]:
+    """Pontualidade de repasse observada do CNPJ (monitor da Bia) vira um
+    fator multiplicativo sobre o Score Empregador. Neutro (1.0) sem dados,
+    para não punir empregador novo. Faixas:
+      >= 95%: 1.05 (bônus)  |  80–95%: 1.00  |  60–80%: 0.85  |  < 60%: 0.70
+    """
+    if not cnpj:
+        return 1.0, "sem_cnpj"
+    try:
+        from repasse_monitor import MONITOR
+        info = MONITOR.score_repasse_empregador(cnpj)
+        taxa = info.get("taxa_pontualidade")
+        if taxa is None:
+            return 1.0, "sem_historico"
+        if taxa >= 0.95:
+            return 1.05, f"pontualidade {taxa:.0%}"
+        if taxa >= 0.80:
+            return 1.0, f"pontualidade {taxa:.0%}"
+        if taxa >= 0.60:
+            return 0.85, f"pontualidade {taxa:.0%}"
+        return 0.70, f"pontualidade {taxa:.0%}"
+    except Exception:
+        return 1.0, "indisponivel"
+
+
 def calcular_score_empregador(pkg: ScorePackage) -> tuple[float, Dict[str, ComponenteScore]]:
     c1 = _score_emp_cadastral(pkg.empregador)
     c2 = _score_emp_financeiro(pkg.empregador)
     c3 = _score_emp_vinculo(pkg.empregador)
     c4 = _score_emp_setorial(pkg.empregador)
-    score = _clamp(c1.contribuicao + c2.contribuicao +
-                   c3.contribuicao + c4.contribuicao)
-    return score, {c.nome: c for c in [c1, c2, c3, c4]}
+    base = _clamp(c1.contribuicao + c2.contribuicao +
+                  c3.contribuicao + c4.contribuicao)
+    cnpj = getattr(pkg.empregador, "cnpj", None) if pkg.empregador else None
+    fator, motivo = _fator_repasse(cnpj)
+    score = _clamp(base * fator)
+    c5 = ComponenteScore(nome="repasse", valor_bruto=fator, peso=0.0,
+                         contribuicao=score - base, notas=[motivo])
+    return score, {c.nome: c for c in [c1, c2, c3, c4, c5]}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -31,10 +31,10 @@ from repasse_monitor import MONITOR, StatusRepasse
 import os
 
 RUBRICA_CONSIGNADO = "9253"
-# Código da instituição consignatária no arquivo da folha. Genérico até a
-# licença de operação definir como a IF aparece no Portal do Empregador
-# (COMPE, CNPJ ou ISPB). Configurável sem deploy via env CODIGO_IF.
-CODIGO_IF = os.getenv("CODIGO_IF", "A_DEFINIR")
+# Fallback do código da consignatária. O valor correto é POR OPERAÇÃO
+# (retornado na averbação via Dataprev/BaaS e gravado na ParcelaEsperada);
+# esta env cobre apenas parcelas antigas sem o dado.
+CODIGO_IF_FALLBACK = os.getenv("CODIGO_IF", "A_DEFINIR")
 
 
 def _so_digitos(s: str) -> str:
@@ -95,7 +95,7 @@ def arquivo_folha(cnpj: str, comp: str) -> str:
         w.writerow([
             _cpf_formatado(cpf) if cpf else "PREENCHER",
             RUBRICA_CONSIGNADO,
-            CODIGO_IF,
+            p.codigo_if or CODIGO_IF_FALLBACK,
             f"{p.valor_esperado:.2f}".replace(".", ","),
             p.numero_parcela,
             p.competencia,

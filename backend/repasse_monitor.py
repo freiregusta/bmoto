@@ -62,6 +62,7 @@ class ParcelaEsperada:
     numero_parcela: int
     valor_esperado: float
     cpf: str = ""
+    codigo_if: str = ""      # consignatária desta operação (vem da averbação)
     valor_recebido: float = 0.0
     status: StatusRepasse = StatusRepasse.PENDENTE
     causa: Optional[CausaProvavel] = None
