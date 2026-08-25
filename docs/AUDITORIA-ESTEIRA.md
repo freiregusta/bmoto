@@ -20,3 +20,18 @@ credenciais | fechado nesta data ✔):
 Próximos (dependem de contratação/licença): homologação BaaS (destrava
 bureaus+leilão+averbação+Pix), contrato Clicksign, contrato KYC,
 persistência SQL de cartório CCB/ordens Pix/monitor.
+
+## Ambiente de demonstração (seed_demo.py)
+
+`python3 seed_demo.py` popula: 5 operações ponta a ponta (CONTRATO_EMITIDO)
+e 15 parcelas de repasse com três perfis de empregador —
+
+| Empregador | Pontualidade | Efeito no Score | Cobrança gerada |
+|---|---|---|---|
+| ACME | 100% | fator 1,05 (bônus) | nenhuma |
+| Beta | 0% | fator 0,70 (penalidade) | EMPREGADOR (não escriturou) |
+| Gama | 67% | fator 0,85 | EMPREGADOR + TRABALHADOR |
+
+Demonstra em conjunto: admin/KPIs, Portal RH (pendências e arquivo da
+folha), régua da Bia com destinatário correto, e o histórico de repasse
+realimentando o Score Empregador. `--limpar` reseta o banco auxiliar.
