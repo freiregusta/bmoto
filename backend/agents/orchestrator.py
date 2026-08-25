@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .base import BaseAgent
+from .bia import build_bia
 from .pedro import build_pedro
 from .rita import build_rita
 from . import rita as rita_mod
@@ -36,6 +37,7 @@ def get_team() -> dict[str, BaseAgent]:
     if not _TEAM:
         _TEAM["rita"] = build_rita()
         _TEAM["pedro"] = build_pedro()
+        _TEAM["bia"] = build_bia()
     return _TEAM
 
 
@@ -45,6 +47,11 @@ _KEYWORDS = {
         "risco", "score", "scorecard", "pd", "lgd", "inadimpl", "hard cut",
         "política de crédito", "pep", "aviso prévio", "carteira", "vintage",
         "empregador", "aprovar", "recusar",
+    ],
+    "bia": [
+        "repasse", "cobrança", "cobranca", "conciliação", "conciliacao",
+        "aging", "atraso", "esocial", "fgts digital", "rubrica", "averbação",
+        "averbacao", "desconto em folha", "operações", "operacoes",
     ],
     "pedro": [
         "preço", "pricing", "taxa", "cet", "spread", "roe", "funding",
