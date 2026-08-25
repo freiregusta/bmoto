@@ -160,3 +160,72 @@ def checklist(cnpj: str) -> dict:
             "Escriturar no eSocial e esquecer a guia do FGTS Digital",
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Visão interna (admin): risco operacional de repasse
+# ---------------------------------------------------------------------------
+admin_router = APIRouter(prefix="/risco-operacional", tags=["risco-operacional"])
+
+
+@admin_router.get("")
+def risco_operacional() -> dict:
+    """
+    Painel de risco operacional: aging por causa + ranking de empregadores.
+    Base da tese da BMoto — ~65% da inadimplência do setor é falha de repasse.
+    """
+    MONITOR.marcar_atrasos()
+    ag = MONITOR.aging()
+
+    # Ranking por empregador com pontualidade e efeito no scorecard
+    cnpjs = {p.cnpj_empregador for p in MONITOR.parcelas}
+    empregadores = []
+    for cnpj in cnpjs:
+        sc = MONITOR.score_repasse_empregador(cnpj)
+        taxa = sc.get("taxa_pontualidade")
+        if taxa is None:
+            fator = 1.0
+        elif taxa >= 0.95:
+            fator = 1.05
+        elif taxa >= 0.80:
+            fator = 1.0
+        elif taxa >= 0.60:
+            fator = 0.85
+        else:
+            fator = 0.70
+        empregadores.append({
+            "cnpj": cnpj,
+            "pontualidade": taxa,
+            "parcelas_observadas": sc.get("parcelas_observadas", 0),
+            "valor_em_atraso": ag["por_empregador"].get(cnpj, 0.0),
+            "fator_scorecard": fator,
+            "bloquear_novas": (taxa is not None and taxa < 0.80),
+        })
+    empregadores.sort(key=lambda e: (-e["valor_em_atraso"], e["pontualidade"] or 1))
+
+    # Split operacional x trabalhador (o número que prova a tese)
+    causas_empregador = {"sem_escrituracao_esocial", "escriturado_sem_recolhimento",
+                         "falha_integracao_plataformas"}
+    val_op = sum(v for k, v in ag["por_causa"].items() if k in causas_empregador)
+    val_trab = ag["por_causa"].get("incapacidade_pagamento", 0.0)
+    val_outros = ag["valor_atrasado"] - val_op - val_trab
+    tot = ag["valor_atrasado"] or 1.0
+
+    return {
+        "resumo": {
+            "parcelas_total": ag["parcelas_total"],
+            "parcelas_atrasadas": ag["parcelas_atrasadas"],
+            "valor_atrasado": ag["valor_atrasado"],
+            "inadimplencia_pct": ag["inadimplencia_pct"],
+            "benchmark_setor_pct": 8.6,
+        },
+        "split_causa": {
+            "operacional_empregador": round(val_op, 2),
+            "trabalhador": round(val_trab, 2),
+            "outros": round(val_outros, 2),
+            "pct_operacional": round(val_op / tot * 100, 1),
+        },
+        "por_causa": ag["por_causa"],
+        "empregadores": empregadores,
+        "acoes_pendentes": len(MONITOR.acoes_cobranca()),
+    }
