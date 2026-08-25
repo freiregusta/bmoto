@@ -34,6 +34,11 @@ from fidc import ParametrosCessao, ceder_operacao, ResultadoCessao, LoteCessao
 from bureau_pricing import pd_por_cpf
 from agents.orchestrator import router as agents_router, set_service as agents_set_service
 from portal_rh import router as portal_rh_router
+import asyncio as _asyncio
+import ccb as ccb_mod
+import kyc as kyc_mod
+import psp as psp_mod
+from fastapi.responses import FileResponse
 from dataprev_client import LeilaoClient, MockLeilaoClient
 from state_machine import (Repository, Operation, Event, EV, S, apply,
                            IllegalTransition)
@@ -262,6 +267,8 @@ class OriginadoraService:
     # ---- 5) Assinatura da CCB (bot) -> dispara averbação ---------------
     def assinar_ccb(self, proposal_id: str, eid: Optional[str] = None) -> Operation:
         op = self._get(proposal_id)
+        reg = ccb_mod.emitir_ccb(op)               # garante o título emitido
+        ccb_mod.CARTORIO.marcar_assinada(proposal_id, evidencia=eid or "")
         self._ev(op, EV.CCB_ASSINADA, eid)
         self._ev(op, EV.SOLICITA_AVERBACAO, None)   # efeito: pede averbação Dataprev
         self.repo.save(op); return op
@@ -273,13 +280,16 @@ class OriginadoraService:
             self._ev(op, EV.AVERBACAO_FALHA, b.event_id)
             self.repo.save(op); return op
         self._ev(op, EV.AVERBACAO_OK, b.event_id)   # -> AVERBADA (gate liberado)
-        # efeito: inicia o Pix (BaaS); confirmação chega no webhook de Pix
+        # efeito: ordem de Pix no PSP (idempotente); confirmação vem no webhook
+        valor = op.pricing.liberado if op.pricing else 0.0
+        _asyncio.run(psp_mod.desembolsar(op.proposal_id, valor))
         self._ev(op, EV.PIX_ENVIADO, None)          # -> DESEMBOLSANDO
         self.repo.save(op); return op
 
     # ---- 7) Liquidação Pix (webhook) -> contabiliza e cede -------------
     def pix(self, proposal_id: str, b: BoolIn) -> Operation:
         op = self._get(proposal_id)
+        psp_mod.confirmar(proposal_id, b.ok)
         if not b.ok:
             self._ev(op, EV.PIX_FALHA, b.event_id)
             self.repo.save(op); return op
@@ -464,6 +474,47 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
               tags=["bot"])
     def ccb(proposal_id: str, idempotency_key: Optional[str] = Header(None)):
         return _guard(svc.assinar_ccb, proposal_id, idempotency_key)
+
+    # --- Formalização: CCB (título) ---
+    @app.post("/operacoes/{proposal_id}/ccb/emitir", tags=["formalizacao"])
+    def ccb_emitir(proposal_id: str):
+        op = svc._get(proposal_id)
+        try:
+            r = ccb_mod.emitir_ccb(op)
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+        return r
+
+    @app.get("/operacoes/{proposal_id}/ccb", tags=["formalizacao"])
+    def ccb_meta(proposal_id: str):
+        r = ccb_mod.CARTORIO.get(proposal_id)
+        if r is None:
+            raise HTTPException(404, "CCB não emitida para esta operação")
+        return r
+
+    @app.get("/operacoes/{proposal_id}/ccb.pdf", tags=["formalizacao"])
+    def ccb_pdf(proposal_id: str):
+        r = ccb_mod.CARTORIO.get(proposal_id)
+        if r is None:
+            raise HTTPException(404, "CCB não emitida para esta operação")
+        return FileResponse(r.caminho_pdf, media_type="application/pdf",
+                            filename=f"{r.numero}.pdf")
+
+    # --- KYC: execução via provider (substitui o booleano manual) ---
+    @app.post("/operacoes/{proposal_id}/kyc/executar", tags=["formalizacao"])
+    async def kyc_executar(proposal_id: str, body: Optional[dict] = None):
+        op = svc._get(proposal_id)
+        w = op.request.worker
+        body = body or {}
+        res = await kyc_mod.executar_kyc(
+            proposal_id,
+            cpf=getattr(w, "cpf", ""), nome=getattr(w, "nome", ""),
+            selfie_b64=body.get("selfie_b64"),
+            doc_frente_b64=body.get("doc_frente_b64"),
+            doc_verso_b64=body.get("doc_verso_b64"))
+        svc.kyc(proposal_id, BoolIn(ok=res.aprovado,
+                                    event_id=f"kyc-{res.provider}-{proposal_id}"))
+        return res
 
     # --- Consulta (dashboard) ---
     @app.get("/operacoes/{proposal_id}", response_model=OperacaoOut, tags=["consulta"])
