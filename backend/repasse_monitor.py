@@ -61,6 +61,7 @@ class ParcelaEsperada:
     competencia: str                # "YYYY-MM"
     numero_parcela: int
     valor_esperado: float
+    cpf: str = ""
     valor_recebido: float = 0.0
     status: StatusRepasse = StatusRepasse.PENDENTE
     causa: Optional[CausaProvavel] = None

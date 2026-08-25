@@ -33,6 +33,7 @@ from contabilidade import Razao, lancamento_desembolso
 from fidc import ParametrosCessao, ceder_operacao, ResultadoCessao, LoteCessao
 from bureau_pricing import pd_por_cpf
 from agents.orchestrator import router as agents_router, set_service as agents_set_service
+from portal_rh import router as portal_rh_router
 from dataprev_client import LeilaoClient, MockLeilaoClient
 from state_machine import (Repository, Operation, Event, EV, S, apply,
                            IllegalTransition)
@@ -389,6 +390,7 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     # Equipe de agentes internos (Rita: risco, Pedro: pricing)
     agents_set_service(svc)
     app.include_router(agents_router)
+    app.include_router(portal_rh_router)
 
     # Origens liberadas: defaults de produção + extras via env (CORS_ORIGINS).
     # Garante que o site nunca caia silenciosamente por env esquecida.
