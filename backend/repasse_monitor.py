@@ -161,6 +161,38 @@ class MonitorRepasses:
             "taxa_pontualidade": round(ok / len(do_cnpj), 3),
         }
 
+    def alertas_preventivos(self, hoje: Optional[date] = None,
+                            dias_antecedencia: int = 5) -> List[dict]:
+        """
+        Diretriz da Bia: não precisar cobrar. Lista parcelas da competência
+        corrente ainda não conciliadas cujo prazo (dia 20) está próximo,
+        para notificar o RH ANTES do atraso existir.
+        """
+        hoje = hoje or date.today()
+        comp_atual = f"{hoje.year:04d}-{hoje.month:02d}"
+        prazo = date(hoje.year, hoje.month, 20)
+        dias_ate = (prazo - hoje).days
+        if dias_ate < 0 or dias_ate > dias_antecedencia:
+            return []
+        pend: Dict[str, dict] = {}
+        for p in self.parcelas:
+            if p.competencia != comp_atual or p.status not in (
+                    StatusRepasse.PENDENTE, StatusRepasse.RECEBIDO_PARCIAL):
+                continue
+            e = pend.setdefault(p.cnpj_empregador, {
+                "cnpj_empregador": p.cnpj_empregador,
+                "competencia": comp_atual,
+                "dias_ate_prazo": dias_ate,
+                "parcelas": 0,
+                "valor": 0.0,
+                "mensagem": ("Faltam {d} dia(s) para o prazo da competência {c}. "
+                             "Confira a rubrica 9253 no eSocial e a guia do FGTS "
+                             "Digital para evitar encargos.").format(d=dias_ate, c=comp_atual),
+            })
+            e["parcelas"] += 1
+            e["valor"] = round(e["valor"] + p.valor_esperado - p.valor_recebido, 2)
+        return list(pend.values())
+
     def acoes_cobranca(self) -> List[dict]:
         """
         Régua de cobrança por parcela atrasada, com destinatário correto:

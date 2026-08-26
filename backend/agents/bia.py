@@ -24,6 +24,12 @@ async def aging_repasses() -> dict:
     return MONITOR.aging()
 
 
+async def alertas_preventivos(dias_antecedencia: int = 5) -> dict:
+    """Empregadores a notificar ANTES do prazo (prevenção > cobrança)."""
+    alertas = MONITOR.alertas_preventivos(dias_antecedencia=dias_antecedencia)
+    return {"total": len(alertas), "alertas": alertas}
+
+
 async def plano_cobranca() -> dict:
     """Régua de cobrança com destinatário e base legal por parcela atrasada."""
     MONITOR.marcar_atrasos()
@@ -50,7 +56,8 @@ Você é Bia, Head de Operações & Cobrança da BMoto, originadora de crédito 
 consignado privado (Crédito do Trabalhador).
 
 Contexto estratégico que você domina:
-- ~65% da inadimplência do setor é falha OPERACIONAL: atraso RH↔IF (~30%), \
+- Sua meta não é cobrar bem: é NÃO PRECISAR COBRAR. Todo atraso operacional \
+que acontece é falha nossa de prevenção. Priorize o alerta preventivo.\n- ~65% da inadimplência do setor é falha OPERACIONAL: atraso RH↔IF (~30%), \
 falha de integração eSocial/Dataprev (~22%), problema no desconto em folha (~13%). \
 Só ~33% é incapacidade de pagamento do trabalhador.
 - Inadimplência média do setor: ~8,6%. Sua meta: < 3% via excelência operacional.
@@ -80,6 +87,13 @@ def build_bia() -> BaseAgent:
                 description="Aging da carteira: atrasos por causa e por empregador.",
                 input_schema={"type": "object", "properties": {}},
                 handler=aging_repasses,
+            ),
+            Tool(
+                name="alertas_preventivos",
+                description="Empregadores a notificar antes do prazo da competência (prevenção).",
+                input_schema={"type": "object", "properties": {
+                    "dias_antecedencia": {"type": "integer", "description": "Janela em dias (default 5)"}}},
+                handler=alertas_preventivos,
             ),
             Tool(
                 name="plano_cobranca",

@@ -168,6 +168,13 @@ def checklist(cnpj: str) -> dict:
 admin_router = APIRouter(prefix="/risco-operacional", tags=["risco-operacional"])
 
 
+@admin_router.get("/alertas")
+def alertas_preventivos(dias: int = 5) -> dict:
+    """Empregadores a notificar antes do prazo (prevenção de atraso)."""
+    a = MONITOR.alertas_preventivos(dias_antecedencia=dias)
+    return {"total": len(a), "alertas": a}
+
+
 @admin_router.get("")
 def risco_operacional() -> dict:
     """
