@@ -28,8 +28,15 @@ from fidc import ParametrosCessao, precificar_cessao
 # ---------------------------------------------------------------------------
 ROE_ALVO_AA = float(os.getenv("ROE_ALVO_AA", "0.35"))
 ROE_MINIMO_AA = float(os.getenv("ROE_MINIMO_AA", "0.20"))
-CAPITAL_RATIO = float(os.getenv("CAPITAL_RATIO", "0.10"))  # TODO: confirmar
-ALIQUOTA_IMPOSTOS = float(os.getenv("ALIQUOTA_IMPOSTOS", "0.34"))  # TODO: confirmar
+# capital_ratio = subordinação retida no FIDC. Mercado usa colchão total de
+# 10-20%; a BMoto retém 7,5% e coloca o restante em mezanino.
+CAPITAL_RATIO = float(os.getenv("CAPITAL_RATIO", "0.075"))
+ALIQUOTA_IMPOSTOS = float(os.getenv("ALIQUOTA_IMPOSTOS", "0.34"))
+# Receita de originação (% do principal). SEM ISSO O CONSIGNADO NÃO FECHA:
+# a 1,99% a.m. o ROE fica em ~9% (abaixo do piso de 20%). Mercado paga 1-6%.
+COMISSAO_ORIGINACAO = float(os.getenv("COMISSAO_ORIGINACAO", "0.04"))
+CUSTO_ORIGINACAO = float(os.getenv("CUSTO_ORIGINACAO", "100.0"))
+TAXA_CESSAO_AM = float(os.getenv("TAXA_CESSAO_AM", "0.0145"))
 
 TAXAS_PRODUTO_AM = {
     "consignado_privado": 0.0199,
@@ -44,6 +51,47 @@ def _roe_mensal(roe_aa: float) -> float:
 
 def _spread_roe_am(roe_aa: float) -> float:
     return CAPITAL_RATIO * _roe_mensal(roe_aa) / (1 - ALIQUOTA_IMPOSTOS)
+
+
+async def roe_operacao(
+    principal: float,
+    prazo_meses: int,
+    taxa_cliente_am: float,
+    el_mensal_pct: float = 0.0020,
+) -> dict:
+    """
+    ROE real da operação no modelo originate-to-distribute.
+
+    Receitas: comissão de originação + ágio da cessão ao FIDC.
+    Custos:   EL sobre o risco RETIDO (subordinação) + custo de originação
+              (ÚNICO — a carteira é vendida, não carregada).
+    Capital:  subordinação retida.
+    """
+    i = taxa_cliente_am
+    n = prazo_meses
+    parcela = principal * (i * (1 + i) ** n) / ((1 + i) ** n - 1)
+    preco = parcela * (1 - (1 + TAXA_CESSAO_AM) ** -n) / TAXA_CESSAO_AM
+    agio = preco - principal
+    comissao = principal * COMISSAO_ORIGINACAO
+    el = principal * CAPITAL_RATIO * el_mensal_pct * n
+    margem = agio + comissao - el - CUSTO_ORIGINACAO
+    capital = principal * CAPITAL_RATIO
+    roe_periodo = margem * (1 - ALIQUOTA_IMPOSTOS) / capital if capital else 0.0
+    roe_aa = (1 + roe_periodo) ** (12 / n) - 1 if n else 0.0
+    return {
+        "receitas": {"comissao_originacao": round(comissao, 2), "agio_cessao": round(agio, 2)},
+        "custos": {"perda_esperada_retida": round(el, 2), "custo_originacao": CUSTO_ORIGINACAO},
+        "margem_contribuicao": round(margem, 2),
+        "margem_pct_principal": round(margem / principal, 4) if principal else 0.0,
+        "capital_alocado": round(capital, 2),
+        "roe_anualizado": round(roe_aa, 4),
+        "atinge_piso_20": roe_aa >= ROE_MINIMO_AA,
+        "atinge_alvo_35": roe_aa >= ROE_ALVO_AA,
+        "premissas": {"comissao_originacao": COMISSAO_ORIGINACAO,
+                      "subordinacao_retida": CAPITAL_RATIO,
+                      "taxa_cessao_am": TAXA_CESSAO_AM,
+                      "custo_originacao": CUSTO_ORIGINACAO},
+    }
 
 
 async def taxa_exigida(
@@ -130,6 +178,10 @@ consignado privado (originate-to-distribute, cessão a FIDC, Fibra como liquidan
 Seu escopo:
 - Motor de CET conforme Resolução CMN 4.881/2020 (base diária/365)
 - Spreads exigidos por ROE: alvo 35% a.a., mínimo 20% a.a.
+- A BMoto tem DUAS receitas: comissão de originação (~4% do principal, paga
+  pela liquidante) e ágio da cessão ao FIDC. Sem a comissão, o consignado a
+  1,99% rende ~9% de ROE e NÃO atinge o piso — sempre considere as duas.
+- Custo de originação é ÚNICO (a carteira é vendida), não mensal.
 - Custo de funding interno: 1,27% a.m. (NUNCA confundir com taxa ao cliente)
 - Taxas ao cliente: consignado 1,99% a.m., pessoal 3,99% a.m., moto 1,79% a.m.
 - Cessão ao FIDC: preço = PV das parcelas na taxa de aquisição do fundo
@@ -165,6 +217,17 @@ def build_pedro() -> BaseAgent:
                     "required": ["el_mensal_pct"],
                 },
                 handler=taxa_exigida,
+            ),
+            Tool(
+                name="roe_operacao",
+                description="ROE real da operação (comissão + ágio - EL retida - custo de originação).",
+                input_schema={"type":"object","properties":{
+                    "principal":{"type":"number"},
+                    "prazo_meses":{"type":"integer"},
+                    "taxa_cliente_am":{"type":"number","description":"decimal, ex 0.0199"},
+                    "el_mensal_pct":{"type":"number","description":"decimal, default 0.0020"}},
+                    "required":["principal","prazo_meses","taxa_cliente_am"]},
+                handler=roe_operacao,
             ),
             Tool(
                 name="simular_cessao",
