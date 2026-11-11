@@ -32,7 +32,7 @@ export default function Modulos() {
     setErro(null);
     const r = await salvar(() => api.put(`/admin/modulos/${m.id}`, { id: m.id, ...parcial }));
     setSalvando(null);
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
   };
 

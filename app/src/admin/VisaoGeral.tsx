@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { numero } from "@/lib/format";
 import { useResumo } from "./useAdmin";
 import { useState } from "react";
+import { rotaAdmin } from "@/rotas";
 
 export default function VisaoGeral() {
   const { dados, carregando, recarregar } = useResumo();
@@ -97,11 +98,11 @@ export default function VisaoGeral() {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Atalho to="/admin/conexoes" icone="PlugZap" titulo="Cadastrar um BaaS"
+        <Atalho to={rotaAdmin("conexoes")} icone="PlugZap" titulo="Cadastrar um BaaS"
                 texto="Ligar um fornecedor novo a qualquer módulo, sem deploy." />
-        <Atalho to="/admin/produtos" icone="Banknote" titulo="Criar produto de crédito"
+        <Atalho to={rotaAdmin("produtos")} icone="Banknote" titulo="Criar produto de crédito"
                 texto="Cartão, moto, pessoal, antecipação: tudo paramétrico." />
-        <Atalho to="/admin/jornadas" icone="Route" titulo="Montar uma jornada"
+        <Atalho to={rotaAdmin("jornadas")} icone="Route" titulo="Montar uma jornada"
                 texto="Definir o passo-a-passo que o app vai executar." />
       </div>
     </div>

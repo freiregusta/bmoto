@@ -54,14 +54,14 @@ export default function ProdutosCredito() {
   const remover = async (p: ProdutoCredito) => {
     if (!window.confirm(`Remover "${p.nome}"? Jornadas que o usam deixam de ofertar.`)) return;
     const r = await salvar(() => api.del(`/admin/produtos-credito/${p.id}`));
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
   };
 
   const alternar = async (p: ProdutoCredito) => {
     const r = await salvar(() =>
       api.put(`/admin/produtos-credito/${p.id}`, { nome: p.nome, tipo: p.tipo, ativo: !p.ativo }));
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
   };
 
@@ -171,7 +171,7 @@ function Simulador({ produto }: { produto: ProdutoCredito }) {
         parcelas: Number(p.parcelas) || null, tem_mei: false, kyc_ok: true,
       }));
     setRodando(false);
-    if (r.ok) setRes(r.dados);
+    if (r.estado === "ok") setRes(r.dados);
     else setErro(r.erro);
   };
 
@@ -251,7 +251,7 @@ function Formulario({ inicial, tiposDisponiveis, emissores, jornadas, modulos, o
       ? await salvar(() => api.put(`/admin/produtos-credito/${inicial.id}`, corpo))
       : await salvar(() => api.post("/admin/produtos-credito", corpo));
     setEnviando(false);
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await onSalvo();
   };
 

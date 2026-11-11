@@ -15,6 +15,7 @@ import { APPS_DEMO } from "@/platform/demo";
 import { usePerfil } from "@/platform/PerfilProvider";
 import type { AppEntrega } from "@/platform/types";
 import type { ModuleDefinition, ModuleProps } from "@/platform/registry";
+import { rotaModulo } from "@/rotas";
 
 export function useAppsEntrega(): { apps: AppEntrega[]; carregando: boolean } {
   const [apps, setApps] = useState<AppEntrega[]>([]);
@@ -105,7 +106,7 @@ function ConectarMais({ modulo, conectados }: { modulo: ModuleProps["modulo"]; c
           <Chip key={a.slug} tom="off">{a.nome}</Chip>
         ))}
       </div>
-      <a href={`${modulo.rota}?novo=1`} className="btn-ghost btn-sm mt-3 w-full">
+      <a href={`${rotaModulo(modulo.id)}?novo=1`} className="btn-ghost btn-sm mt-3 w-full">
         Conectar agora
       </a>
     </Card>
@@ -125,7 +126,7 @@ function GanhosResumo({ modulo }: ModuleProps) {
           <p className="font-semibold">Conecte seus apps de entrega</p>
           <p className="text-xs text-ink-faint">Sua renda real destrava moto, cartão e crédito</p>
         </div>
-        <a href={modulo.rota} className="btn-primary btn-sm">Conectar</a>
+        <a href={rotaModulo(modulo.id)} className="btn-primary btn-sm">Conectar</a>
       </Card>
     );
   return (
@@ -141,7 +142,7 @@ function GanhosResumo({ modulo }: ModuleProps) {
             {conectados.length === 1 ? "" : "s"}
           </p>
         </div>
-        <a href={modulo.rota} className="btn-ghost btn-sm">Ver</a>
+        <a href={rotaModulo(modulo.id)} className="btn-ghost btn-sm">Ver</a>
       </div>
     </Card>
   );

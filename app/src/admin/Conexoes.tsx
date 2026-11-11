@@ -53,7 +53,7 @@ export default function Conexoes() {
 
   const testar = async (id: string) => {
     const r = await salvar(() => api.post<HealthConexao>(`/admin/conexoes/${id}/testar`));
-    if (r.ok) setSaude((s) => ({ ...s, [id]: r.dados }));
+    if (r.estado === "ok") setSaude((s) => ({ ...s, [id]: r.dados }));
     else setErro(r.erro);
   };
 
@@ -61,7 +61,7 @@ export default function Conexoes() {
     const r = c.ativo
       ? await salvar(() => api.post(`/admin/conexoes/${c.id}/desligar`))
       : await salvar(() => api.put(`/admin/conexoes/${c.id}`, { ...c, ativo: true }));
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
     await recarregarPlataforma();
   };
@@ -70,7 +70,7 @@ export default function Conexoes() {
     if (!window.confirm(`Remover a conexão "${c.titulo}"? Os módulos que a usam voltam ao fornecedor global.`))
       return;
     const r = await salvar(() => api.del(`/admin/conexoes/${c.id}`));
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
     await recarregarPlataforma();
   };
@@ -255,7 +255,7 @@ function FormularioConexao({ inicial, tipos, modulos, onCancelar, onSalvo }: {
       ? await salvar(() => api.put(`/admin/conexoes/${inicial.id}`, corpo))
       : await salvar(() => api.post("/admin/conexoes", corpo));
     setEnviando(false);
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await onSalvo();
   };
 

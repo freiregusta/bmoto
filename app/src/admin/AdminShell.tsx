@@ -10,15 +10,16 @@ import { useState } from "react";
 import { Icone, Logo } from "@/components/ui";
 import { definirTokenAdmin, obterTokenAdmin } from "@/lib/api";
 import { usePlataforma } from "@/platform/PlatformProvider";
+import { rotaAdmin, rotaInicio } from "@/rotas";
 
 const ITENS = [
-  { to: "/admin", rotulo: "Visão geral", icone: "LayoutDashboard", fim: true },
-  { to: "/admin/conexoes", rotulo: "Conexões (BaaS)", icone: "PlugZap" },
-  { to: "/admin/produtos", rotulo: "Produtos de crédito", icone: "Banknote" },
-  { to: "/admin/apps", rotulo: "Apps de entrega", icone: "Smartphone" },
-  { to: "/admin/modulos", rotulo: "Módulos do app", icone: "LayoutGrid" },
-  { to: "/admin/jornadas", rotulo: "Jornadas", icone: "Route" },
-  { to: "/admin/auditoria", rotulo: "Auditoria", icone: "ScrollText" },
+  { to: rotaAdmin(), rotulo: "Visão geral", icone: "LayoutDashboard", fim: true },
+  { to: rotaAdmin("conexoes"), rotulo: "Conexões (BaaS)", icone: "PlugZap" },
+  { to: rotaAdmin("produtos"), rotulo: "Produtos de crédito", icone: "Banknote" },
+  { to: rotaAdmin("apps"), rotulo: "Apps de entrega", icone: "Smartphone" },
+  { to: rotaAdmin("modulos"), rotulo: "Módulos do app", icone: "LayoutGrid" },
+  { to: rotaAdmin("jornadas"), rotulo: "Jornadas", icone: "Route" },
+  { to: rotaAdmin("auditoria"), rotulo: "Auditoria", icone: "ScrollText" },
 ];
 
 export function AdminShell() {
@@ -30,7 +31,7 @@ export function AdminShell() {
     <div className="min-h-screen lg:flex">
       <aside className="border-b border-white/8 bg-navy-600/50 lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between gap-3 px-4 py-4">
-          <Link to="/app" className="text-ink" aria-label="Voltar ao app">
+          <Link to={rotaInicio()} className="text-ink" aria-label="Voltar ao app">
             <Logo className="h-6 text-xl" />
           </Link>
           <span className="chip">admin</span>

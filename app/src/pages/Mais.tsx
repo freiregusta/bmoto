@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Card, Chip, Icone, SecaoTitulo } from "@/components/ui";
 import { usePlataforma } from "@/platform/PlatformProvider";
 import { temTelaDedicada } from "@/platform/registry";
+import { rotaAdmin, rotaModulo } from "@/rotas";
 
 export default function Mais() {
   const { modulos } = usePlataforma();
@@ -16,7 +17,7 @@ export default function Mais() {
 
       <section className="space-y-2">
         {ligados.map((m) => (
-          <Link key={m.id} to={m.rota}
+          <Link key={m.id} to={rotaModulo(m.id)}
                 className="card flex items-center gap-4 transition hover:border-mint/30">
             <div className="rounded-xl bg-mint/12 p-2.5">
               <Icone nome={m.icone} className="h-5 w-5 text-mint" />
@@ -47,7 +48,7 @@ export default function Mais() {
         </section>
       )}
 
-      <Link to="/admin" className="btn-ghost w-full">
+      <Link to={rotaAdmin()} className="btn-ghost w-full">
         <Icone nome="SlidersHorizontal" className="h-4 w-4" />
         Painel de administração
       </Link>

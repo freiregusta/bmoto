@@ -68,6 +68,12 @@ async function bruto<T>(metodo: Metodo, caminho: string, corpo?: unknown): Promi
       },
       body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
     });
+    // Resposta que não é JSON quase sempre quer dizer "não tem backend aqui":
+    // um SPA servindo index.html para qualquer rota, ou um proxy no meio.
+    // Tratar como backend ausente leva ao modo demo em vez de uma tela quebrada.
+    const tipo = res.headers.get("content-type") ?? "";
+    if (res.ok && !tipo.includes("json")) throw new SemBackend();
+
     backendVivo = true;
     const texto = await res.text();
     const dados = texto ? safeJson(texto) : null;

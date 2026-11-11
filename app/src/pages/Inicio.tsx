@@ -11,6 +11,7 @@ import { Card, Carregando, Chip, Icone, SecaoTitulo } from "@/components/ui";
 import { usePlataforma } from "@/platform/PlatformProvider";
 import { obterModulo } from "@/platform/registry";
 import { usePerfil } from "@/platform/PerfilProvider";
+import { rotaModulo } from "@/rotas";
 
 export default function Inicio() {
   const { disponiveis, modulos, carregando, modoDemo } = usePlataforma();
@@ -39,7 +40,7 @@ export default function Inicio() {
           <SecaoTitulo titulo="Seus produtos" subtitulo="Tudo que a BMoto resolve para você" />
           <div className="grid grid-cols-2 gap-3">
             {atalhos.map((m) => (
-              <Link key={m.id} to={m.rota}
+              <Link key={m.id} to={rotaModulo(m.id)}
                     className="card flex flex-col gap-2 transition hover:border-mint/30">
                 <Icone nome={m.icone} className="h-6 w-6 text-mint" />
                 <span className="font-semibold leading-snug">{m.titulo}</span>

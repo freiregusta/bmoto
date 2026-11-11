@@ -80,11 +80,22 @@ export const useAuditoria = () =>
   useRecurso<{ registros: RegistroAuditoria[] }>(() => api.get("/admin/auditoria?limite=80"),
                                                  () => ({ registros: [] }));
 
-/** Escrita: devolve mensagem de erro legível em vez de estourar na tela. */
-export async function salvar<T>(fn: () => Promise<T>): Promise<{ ok: true; dados: T } | { ok: false; erro: string }> {
+/**
+ * Escrita: devolve mensagem de erro legível em vez de estourar na tela.
+ *
+ * O discriminante é TEXTO, não booleano, de propósito: embutido no projeto do
+ * Lovable o app compila com `strict: false`, e sem `strictNullChecks` o
+ * TypeScript não estreita união por literal booleano — por literal de texto,
+ * sim. Assim o mesmo código compila nas duas configurações.
+ */
+export type Resultado<T> =
+  | { estado: "ok"; dados: T }
+  | { estado: "erro"; erro: string };
+
+export async function salvar<T>(fn: () => Promise<T>): Promise<Resultado<T>> {
   try {
-    return { ok: true, dados: await fn() };
+    return { estado: "ok", dados: await fn() };
   } catch (e) {
-    return { ok: false, erro: e instanceof Error ? e.message : "não deu para salvar" };
+    return { estado: "erro", erro: e instanceof Error ? e.message : "não deu para salvar" };
   }
 }

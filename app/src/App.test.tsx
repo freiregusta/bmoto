@@ -5,7 +5,7 @@
  * manifestos, e um módulo sem tela dedicada é vendido pela jornada.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -81,7 +81,7 @@ describe("super app", () => {
 
 describe("painel de administração", () => {
   it("mostra o estado da plataforma", async () => {
-    abrir("/admin");
+    abrir("/app/admin");
     expect(await screen.findByRole("heading", { name: "Visão geral" })).toBeDefined();
     expect(await screen.findByText("Módulos ligados")).toBeDefined();
     expect(screen.getByText(/Nenhuma. Todo módulo ligado tem fornecedor capaz./)).toBeDefined();
@@ -89,7 +89,7 @@ describe("painel de administração", () => {
 
   it("lista as conexões por capacidade e oferece o cadastro sem código", async () => {
     const usuario = userEvent.setup();
-    abrir("/admin/conexoes");
+    abrir("/app/admin/conexoes");
 
     expect(await screen.findByRole("heading", { name: "Conexões" })).toBeDefined();
     expect(await screen.findByText(/Port "conta"/)).toBeDefined();
@@ -111,7 +111,7 @@ describe("painel de administração", () => {
 
   it("deixa montar uma jornada passo a passo", async () => {
     const usuario = userEvent.setup();
-    abrir("/admin/jornadas");
+    abrir("/app/admin/jornadas");
 
     expect(await screen.findByRole("heading", { name: "Jornadas" })).toBeDefined();
     await usuario.click(screen.getByRole("button", { name: /Nova jornada/ }));

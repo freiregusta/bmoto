@@ -11,6 +11,7 @@ import { Card, Campo, Chip, Icone, Metrica, SecaoTitulo } from "@/components/ui"
 import { brl, numero, paraNumero, pct } from "@/lib/format";
 import { usePerfil } from "@/platform/PerfilProvider";
 import type { ModuleDefinition, ModuleProps } from "@/platform/registry";
+import { rotaModulo } from "@/rotas";
 import { PARAMETROS_PADRAO, avaliarCorrida, calcular, type Parametros, type Periodo }
   from "./calculo";
 
@@ -306,7 +307,7 @@ function MargemResumo({ modulo }: ModuleProps) {
             custo {brl(res.custoPorKm, 2)}/km · margem {pct(res.margem, 0)}
           </p>
         </div>
-        <a href={modulo.rota} className="btn-ghost btn-sm">
+        <a href={rotaModulo(modulo.id)} className="btn-ghost btn-sm">
           Abrir
           <Icone nome="ArrowRight" className="h-3.5 w-3.5" />
         </a>

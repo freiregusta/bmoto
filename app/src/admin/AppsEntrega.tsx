@@ -50,7 +50,7 @@ export default function AppsEntrega() {
 
   const testar = async (id: string) => {
     const r = await salvar(() => api.post<HealthConexao>(`/admin/apps-entrega/${id}/testar`));
-    if (r.ok) setSaude((s) => ({ ...s, [id]: r.dados }));
+    if (r.estado === "ok") setSaude((s) => ({ ...s, [id]: r.dados }));
     else setErro(r.erro);
   };
 
@@ -58,7 +58,7 @@ export default function AppsEntrega() {
     if (!window.confirm(`Remover "${a.nome}"? Entregadores já conectados deixam de ser lidos.`))
       return;
     const r = await salvar(() => api.del(`/admin/apps-entrega/${a.id}`));
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
   };
 
@@ -161,7 +161,7 @@ function Formulario({ inicial, tiposIntegracao, onCancelar, onSalvo }: {
       ? await salvar(() => api.put(`/admin/apps-entrega/${inicial.id}`, corpo))
       : await salvar(() => api.post("/admin/apps-entrega", corpo));
     setEnviando(false);
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await onSalvo();
   };
 

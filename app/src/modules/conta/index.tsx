@@ -13,6 +13,7 @@ import { api, comDemo } from "@/lib/api";
 import { brl, dataHora } from "@/lib/format";
 import { usePerfil } from "@/platform/PerfilProvider";
 import type { ModuleDefinition, ModuleProps } from "@/platform/registry";
+import { rotaModulo } from "@/rotas";
 
 interface Lancamento {
   lancamento_id: string;
@@ -105,7 +106,7 @@ function ContaAberta({ contaId }: { contaId: string }) {
             <Icone nome="RefreshCw" className="h-4 w-4" />
             Atualizar
           </button>
-          <a className="btn-ghost flex-col py-3 text-[11px]" href="/app/ganhos">
+          <a className="btn-ghost flex-col py-3 text-[11px]" href={rotaModulo("ganhos")}>
             <Icone nome="TrendingUp" className="h-4 w-4" />
             Ganhos
           </a>
@@ -208,7 +209,7 @@ function ContaResumo({ modulo }: ModuleProps) {
           <p className="font-semibold">Abra sua conta BMoto</p>
           <p className="text-xs text-ink-faint">Para receber o repasse dos apps em um lugar só</p>
         </div>
-        <a href={modulo.rota} className="btn-primary btn-sm">Abrir</a>
+        <a href={rotaModulo(modulo.id)} className="btn-primary btn-sm">Abrir</a>
       </Card>
     );
   return (
@@ -222,7 +223,7 @@ function ContaResumo({ modulo }: ModuleProps) {
         </div>
         <Chip tom="on">ativa</Chip>
       </div>
-      <a href={modulo.rota} className="btn-ghost btn-sm mt-3 w-full">Ver saldo e extrato</a>
+      <a href={rotaModulo(modulo.id)} className="btn-ghost btn-sm mt-3 w-full">Ver saldo e extrato</a>
     </Card>
   );
 }

@@ -48,7 +48,7 @@ export default function Jornadas() {
     if (!window.confirm(`Remover a jornada "${j.nome}"? O módulo fica sem fluxo até receber outra.`))
       return;
     const r = await salvar(() => api.del(`/admin/jornadas/${j.id}`));
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await recarregar();
   };
 
@@ -161,7 +161,7 @@ function Editor({ inicial, onCancelar, onSalvo }: {
       ? await salvar(() => api.put(`/admin/jornadas/${inicial.id}`, corpo))
       : await salvar(() => api.post("/admin/jornadas", corpo));
     setEnviando(false);
-    if (!r.ok) return setErro(r.erro);
+    if (r.estado === "erro") return setErro(r.erro);
     await onSalvo();
   };
 
