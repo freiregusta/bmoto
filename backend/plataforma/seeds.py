@@ -51,16 +51,25 @@ PRODUTOS_CREDITO = [
 # ganho. "declarado" é o que funciona hoje — ninguém tem API aberta de ganhos
 # para terceiro. Quando houver integração, troca-se o tipo aqui.
 APPS_ENTREGA = [
+    # `identificadores` reconhecem o pagador no extrato. Começam pelo nome,
+    # que é verificável à vista; o CNPJ entra em `cnpjs` quando alguém
+    # confirmar em documento — chutar CNPJ aqui atribuiria renda à empresa
+    # errada.
     {"id": "ifood", "nome": "iFood", "slug": "ifood", "tipo_integracao": "declarado",
-     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 10},
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 10,
+     "identificadores": ["IFOOD"], "cnpjs": []},
     {"id": "rappi", "nome": "Rappi", "slug": "rappi", "tipo_integracao": "declarado",
-     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 20},
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 20,
+     "identificadores": ["RAPPI"], "cnpjs": []},
     {"id": "99", "nome": "99Food", "slug": "99", "tipo_integracao": "declarado",
-     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 30},
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 30,
+     "identificadores": ["99 TECNOLOGIA", "99FOOD", "99 POP"], "cnpjs": []},
     {"id": "uber", "nome": "Uber Eats", "slug": "uber", "tipo_integracao": "declarado",
-     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 40},
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 40,
+     "identificadores": ["UBER"], "cnpjs": []},
     {"id": "loggi", "nome": "Loggi", "slug": "loggi", "tipo_integracao": "declarado",
-     "provider_tipo": "nenhum", "periodicidade_repasse": "quinzenal", "ordem": 50},
+     "provider_tipo": "nenhum", "periodicidade_repasse": "quinzenal", "ordem": 50,
+     "identificadores": ["LOGGI"], "cnpjs": []},
     {"id": "outros", "nome": "Outro app ou particular", "slug": "outros",
      "tipo_integracao": "declarado", "provider_tipo": "nenhum",
      "periodicidade_repasse": "semanal", "ordem": 90},

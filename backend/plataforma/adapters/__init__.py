@@ -73,6 +73,34 @@ CAMPOS_REST: tuple[CampoConfig, ...] = (
     CampoConfig("timeout_s", "Timeout (s)", "numero", False, default=20),
 )
 
+CAMPOS_OPEN_FINANCE: tuple[CampoConfig, ...] = (
+    CampoConfig("modo", "Como consumimos", "select", True,
+                "direto = a instituição autorizada transmite; agregador = participante "
+                "contratado (Klavi, Belvo, Pluggy) expõe a mesma informação.",
+                opcoes=("direto", "agregador"), default="direto"),
+    CampoConfig("base_url", "URL base", "url", True,
+                "Do transmissor (direto) ou do agregador."),
+    CampoConfig("auth", "Autenticação", "json", True,
+                'Ex.: {"token_url":"/token","env_client_id":"OF_CLIENT_ID",'
+                '"env_client_secret":"OF_CLIENT_SECRET","scope":"consents accounts resources"}'),
+    CampoConfig("env_certificado", "Variável com o certificado mTLS", "segredo_env", False,
+                "O ecossistema exige mTLS. Guarde o CAMINHO do arquivo nesta variável."),
+    CampoConfig("env_chave_privada", "Variável com a chave privada", "segredo_env", False),
+    CampoConfig("url_autorizacao", "Modelo da URL de autorização", "texto", False,
+                "Use {consentimento_id} onde entra o id. É para onde o entregador vai "
+                "autorizar no banco dele."),
+    CampoConfig("permissoes", "Permissões do consentimento", "json", False,
+                'Default: contas, saldos, transações e recursos.'),
+    CampoConfig("validade_dias", "Validade do consentimento (dias)", "numero", False,
+                "O ecossistema permite até 12 meses.", default=365),
+    CampoConfig("path_consentimento", "Caminho do consentimento", "texto", False,
+                default="/consents/v3/consents"),
+    CampoConfig("path_contas", "Caminho das contas", "texto", False,
+                default="/accounts/v2/accounts"),
+    CampoConfig("path_transacoes", "Caminho das transações", "texto", False,
+                default="/accounts/v2/accounts/{conta_id}/transactions"),
+)
+
 CAMPOS_CELCOIN: tuple[CampoConfig, ...] = (
     CampoConfig("env_base_url", "Variável com a URL base", "segredo_env", False,
                 "Default: BAAS_BASE_URL", default="BAAS_BASE_URL"),
@@ -91,6 +119,11 @@ CATALOGO: tuple[AdapterSpec, ...] = (
     AdapterSpec("rest", "REST genérico (cadastro pela tela)", tuple(PORTS),
                 "Descreva a API do fornecedor em JSON e ele passa a atender o módulo. "
                 "Nenhum deploy necessário.", CAMPOS_REST, sem_codigo=True),
+    AdapterSpec("open_finance", "Open Finance (renda comprovada)", ("renda",),
+                "Lê, com consentimento do entregador, os repasses que as plataformas "
+                "depositam na conta dele. Não depende de API do iFood ou do 99: depende "
+                "do extrato, que é dele. Atende tanto a instituição transmissora quanto "
+                "um agregador contratado.", CAMPOS_OPEN_FINANCE),
     AdapterSpec("celcoin", "Celcoin (BaaS)", ("conta",),
                 "Adapter nativo: conta individual, Pix e cobrança.", CAMPOS_CELCOIN),
 )
@@ -117,6 +150,9 @@ def construir(tipo: str, port: str, config: Optional[dict] = None, nome: Optiona
         return inst
     if tipo == "rest":
         return rest.construir(port, config, nome)
+    if tipo == "open_finance":
+        from .openfinance import OpenFinanceRendaProvider
+        return OpenFinanceRendaProvider(config, nome)
     if tipo == "celcoin":
         from .celcoin import CelcoinContaProvider
         return CelcoinContaProvider()

@@ -20,6 +20,7 @@ import {
 } from "@/platform/meusDados";
 import type { ModuleDefinition, ModuleProps } from "@/platform/registry";
 import { rotaModulo } from "@/rotas";
+import { ImportarExtrato } from "./ImportarExtrato";
 
 function GanhosTela(_: ModuleProps) {
   const { perfil } = usePerfil();
@@ -105,6 +106,8 @@ function GanhosTela(_: ModuleProps) {
         </Vazio>
       )}
 
+      <ImportarExtrato onImportado={recarregar} />
+
       <Card>
         <SecaoTitulo titulo="Lançar um período"
                      subtitulo="Pode corrigir depois: relançar o mesmo app e mês substitui" />
@@ -153,8 +156,9 @@ function GanhosTela(_: ModuleProps) {
         <p className="text-sm leading-relaxed text-ink-muted">
           iFood, Rappi e 99 não abrem os ganhos do entregador para terceiros. O caminho
           regulado é o Open Finance: com a sua autorização, ler na sua conta os repasses que
-          essas plataformas depositam. Estamos construindo esse conector — até ele entrar, o
-          lançamento aqui é o que há de verdadeiro.
+          essas plataformas depositam — o conector está pronto e aguarda a instituição
+          transmissora. Até lá, importar o extrato dá no mesmo, e é você quem confere antes de
+          gravar.
         </p>
       </Card>
     </div>

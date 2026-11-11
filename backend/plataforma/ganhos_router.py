@@ -11,6 +11,11 @@ dado a resposta diz o que falta, em vez de preencher.
     GET  /me/resumo                 renda, custos e margem líquida real
     POST /me/simular/{produto_id}   simulação de crédito sobre a renda real
     POST /me/interesse              lista de espera de produto indisponível
+
+    POST /me/extrato/conferir       lê um extrato e MOSTRA o que reconheceu
+    POST /me/extrato/importar       confirma e vira lançamento de ganho
+    POST /me/openfinance/consentir  inicia o consentimento (quando contratado)
+    POST /me/openfinance/importar   lê os repasses pelo consentimento autorizado
 """
 
 from __future__ import annotations
@@ -66,6 +71,22 @@ class SimulacaoIn(BaseModel):
     parcelas: Optional[int] = None
     valor_garantia: float = 0.0
     tem_mei: bool = False
+
+
+class ExtratoIn(BaseModel):
+    cpf: str
+    conteudo: str                       # CSV exportado do banco ou do app
+    substituir: bool = False            # relançar por cima do que já existe
+
+
+class ConsentimentoIn(BaseModel):
+    cpf: str
+
+
+class ImportarOpenFinanceIn(BaseModel):
+    cpf: str
+    consentimento_id: str
+    meses: int = 3
 
 
 class InteresseIn(BaseModel):
@@ -159,6 +180,100 @@ def simular(produto_id: str, body: SimulacaoIn):
         "verificação de identidade (KYC)",
     ]
     return resultado
+
+
+# ------------------------------------------------------------ extrato
+
+def _classificar_texto(conteudo: str):
+    """Lê o CSV e separa o que é repasse de plataforma. Mesmo classificador
+    que o Open Finance usa — a fonte muda, a conta não."""
+    from .openfinance import classificar, ler_csv, regras_do_catalogo
+    try:
+        transacoes = ler_csv(conteudo)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if not transacoes:
+        raise HTTPException(422, "não consegui ler nenhuma linha com data e valor")
+    return transacoes, classificar(transacoes, regras_do_catalogo(catalogo.apps_entrega(False)))
+
+
+def _resposta_classificacao(transacoes, c) -> dict:
+    return {
+        "linhas_lidas": len(transacoes),
+        "creditos_total": c.total_creditos,
+        "identificado_total": c.total_identificado,
+        "cobertura": c.cobertura,
+        "por_app": {slug: {"nome": a.nome, "total": a.total, "lancamentos": a.lancamentos,
+                           "competencias": a.competencias}
+                    for slug, a in c.por_app.items()},
+        "por_competencia": c.renda_mensal(),
+        "nao_identificados": [
+            {"data": t.data, "valor": t.valor, "descricao": t.descricao,
+             "pagador": t.pagador_nome}
+            for t in c.nao_identificados[:20]
+        ],
+        "nao_identificados_total": len(c.nao_identificados),
+    }
+
+
+@router.post("/extrato/conferir")
+def conferir_extrato(body: ExtratoIn):
+    """Mostra o que foi reconhecido ANTES de gravar. O entregador confere o
+    que a gente entendeu do extrato dele — nada entra pelas costas."""
+    transacoes, c = _classificar_texto(body.conteudo)
+    return _resposta_classificacao(transacoes, c)
+
+
+@router.post("/extrato/importar")
+def importar_extrato(body: ExtratoIn):
+    from .openfinance import para_lancamentos
+    transacoes, c = _classificar_texto(body.conteudo)
+    if not c.por_app:
+        raise HTTPException(422, {
+            "erro": "nenhum_repasse_reconhecido",
+            "mensagem": "Li o extrato mas não reconheci repasse de plataforma nenhuma. "
+                        "Confira os identificadores em Admin → Apps de entrega.",
+            **_resposta_classificacao(transacoes, c)})
+    gravados = [repo.lancar(l) for l in para_lancamentos(c, body.cpf, origem="extrato")]
+    return {"lancamentos": len(gravados), **_resposta_classificacao(transacoes, c)}
+
+
+# -------------------------------------------------------- open finance
+
+def _provider_open_finance():
+    from .registry import ProvedorNaoConfigurado, plataforma
+    try:
+        return plataforma.renda()
+    except ProvedorNaoConfigurado as e:
+        raise HTTPException(503, {"erro": "fornecedor_nao_configurado", "port": e.port,
+                                  "dependencia": e.dependencia, "mensagem": str(e)})
+
+
+@router.post("/openfinance/consentir")
+async def openfinance_consentir(body: ConsentimentoIn):
+    """Inicia o consentimento. Devolve a URL onde o entregador autoriza no
+    banco dele — é ele quem libera, e pode revogar quando quiser."""
+    prov = _provider_open_finance()
+    try:
+        c = await prov.consentir(body.cpf, "open_finance")
+    except Exception as e:
+        raise HTTPException(502, f"o transmissor não respondeu: {e}")
+    return {**asdict(c), "url_autorizacao": getattr(c, "url_autorizacao", "")}
+
+
+@router.post("/openfinance/importar")
+async def openfinance_importar(body: ImportarOpenFinanceIn):
+    """Com o consentimento autorizado, lê os repasses e grava como ganho."""
+    prov = _provider_open_finance()
+    try:
+        meses = await prov.renda(body.consentimento_id, body.meses)
+    except Exception as e:
+        raise HTTPException(502, f"não deu para ler as transações: {e}")
+    gravados = [repo.lancar({"cpf": body.cpf, "app": m.fonte, "competencia": m.competencia,
+                             "bruto": m.bruto, "origem": "open_finance"})
+                for m in meses]
+    return {"lancamentos": len(gravados),
+            "por_competencia": {m.competencia: m.bruto for m in meses}}
 
 
 @router.post("/interesse")

@@ -122,6 +122,8 @@ class AppEntregaIn(BaseModel):
     periodicidade_repasse: str = "semanal"
     taxa_plataforma: float = 0.0
     mapeamento: dict = {}
+    cnpjs: list[str] = []
+    identificadores: list[str] = []
     logo_url: str = ""
     ativo: bool = True
     ordem: int = 100

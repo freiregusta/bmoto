@@ -215,6 +215,12 @@ class AppEntrega:
     taxa_plataforma: float = 0.0            # % que a plataforma retém, se informado
     # mapeamento de campos do payload do app -> RendaMensal
     mapeamento: dict = field(default_factory=dict)
+    # Como reconhecer o repasse desta plataforma no extrato do entregador.
+    # Usado pelo classificador do Open Finance e pela importação de extrato.
+    # Os CNPJs NÃO vêm chumbados no código: CNPJ errado atribui renda à
+    # plataforma errada, então quem confere preenche aqui.
+    cnpjs: list = field(default_factory=list)
+    identificadores: list = field(default_factory=list)
     logo_url: str = ""
     ativo: bool = True
     ordem: int = 100
