@@ -1,9 +1,13 @@
 /**
  * PerfilProvider — quem está usando o app.
  *
- * Sem backend de autenticação ainda: o perfil fica no aparelho. Quando entrar
- * o login (OTP por SMS + token do BaaS), só este arquivo muda — as telas já
- * consomem `usePerfil()`.
+ * Quem abre o app pela primeira vez NÃO tem perfil: `cadastrado` é falso e a
+ * entrada manda para o cadastro. Nada de usuário de exemplo já logado — a
+ * primeira tela de um app novo é criar a conta.
+ *
+ * Sem backend de autenticação ainda, o cadastro fica no aparelho. Quando
+ * entrar o login de verdade (OTP por SMS + token do BaaS), só este arquivo
+ * muda: as telas já consomem `usePerfil()`.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -21,12 +25,13 @@ export interface Perfil {
   cadastrado: boolean;
 }
 
-const PADRAO: Perfil = {
-  cpf: "12345678909",
-  nome: "João Entregador",
-  nascimento: "1995-03-10",
-  celular: "(11) 99999-0000",
-  email: "joao@exemplo.com",
+/** Ninguém, ainda. É o estado de quem acabou de instalar o app. */
+const VAZIO: Perfil = {
+  cpf: "",
+  nome: "",
+  nascimento: "",
+  celular: "",
+  email: "",
   cnpjMei: null,
   score: 640,
   cadastrado: false,
@@ -51,10 +56,24 @@ export interface Carteira {
 const CHAVE = "bmoto.perfil";
 const CHAVE_CARTEIRA = "bmoto.carteira";
 
+export interface DadosCadastro {
+  nome: string;
+  cpf: string;
+  nascimento: string;
+  celular: string;
+  email?: string;
+}
+
 interface Ctx {
   perfil: Perfil;
   carteira: Carteira;
+  /** Já criou conta neste aparelho? */
+  autenticado: boolean;
   atualizar: (parcial: Partial<Perfil>) => void;
+  cadastrar: (dados: DadosCadastro) => void;
+  /** Entrar com um cadastro já feito neste aparelho. */
+  entrar: (cpf: string) => boolean;
+  sair: () => void;
   /** Guarda o que uma jornada concluída produziu. */
   registrarEntregaveis: (contexto: Record<string, any>) => void;
   limpar: () => void;
@@ -62,14 +81,16 @@ interface Ctx {
 
 const PerfilCtx = createContext<Ctx | null>(null);
 
+const soDigitos = (v: string) => v.replace(/\D/g, "");
+
 function ler(): Perfil {
   try {
     const bruto = localStorage.getItem(CHAVE);
-    if (!bruto) return PADRAO;
+    if (!bruto) return VAZIO;
     const lido = JSON.parse(bruto) as Partial<Perfil>;
-    return { ...PADRAO, ...lido };
+    return { ...VAZIO, ...lido };
   } catch {
-    return PADRAO;
+    return VAZIO;
   }
 }
 
@@ -98,6 +119,30 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
     setPerfil((p) => ({ ...p, ...parcial }));
   }, []);
 
+  const cadastrar = useCallback((dados: DadosCadastro) => {
+    setPerfil((p) => ({
+      ...p,
+      nome: dados.nome.trim(),
+      cpf: soDigitos(dados.cpf),
+      nascimento: dados.nascimento,
+      celular: dados.celular,
+      email: dados.email ?? "",
+      cadastrado: true,
+    }));
+  }, []);
+
+  const entrar = useCallback((cpf: string) => {
+    const guardado = ler();
+    if (!guardado.cpf || soDigitos(cpf) !== guardado.cpf) return false;
+    setPerfil({ ...guardado, cadastrado: true });
+    return true;
+  }, []);
+
+  const sair = useCallback(() => {
+    // Sair não apaga o cadastro: só tira a sessão deste aparelho.
+    setPerfil((p) => ({ ...p, cadastrado: false }));
+  }, []);
+
   const registrarEntregaveis = useCallback((ctx: Record<string, any>) => {
     setCarteira((c) => ({
       ...c,
@@ -115,7 +160,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const limpar = useCallback(() => {
-    setPerfil(PADRAO);
+    setPerfil(VAZIO);
     setCarteira({});
     try {
       localStorage.removeItem(CHAVE);
@@ -126,8 +171,9 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const valor = useMemo(
-    () => ({ perfil, carteira, atualizar, registrarEntregaveis, limpar }),
-    [perfil, carteira, atualizar, registrarEntregaveis, limpar],
+    () => ({ perfil, carteira, autenticado: perfil.cadastrado, atualizar, cadastrar,
+             entrar, sair, registrarEntregaveis, limpar }),
+    [perfil, carteira, atualizar, cadastrar, entrar, sair, registrarEntregaveis, limpar],
   );
   return <PerfilCtx.Provider value={valor}>{children}</PerfilCtx.Provider>;
 }

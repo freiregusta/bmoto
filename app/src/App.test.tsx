@@ -8,7 +8,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import App from "./App";
 
 const abrir = (rota: string) =>
@@ -18,10 +18,73 @@ const abrir = (rota: string) =>
     </MemoryRouter>,
   );
 
+/** Quem já criou conta neste aparelho — o app guarda em localStorage. */
+function comCadastro(nome = "Carlos Souza") {
+  localStorage.setItem(
+    "bmoto.perfil",
+    JSON.stringify({ nome, cpf: "12345678909", nascimento: "1995-03-10",
+                     celular: "(11) 99999-0000", email: "", cnpjMei: null,
+                     score: 640, cadastrado: true }),
+  );
+}
+
+describe("primeira vez no app", () => {
+  it("quem acabou de instalar cai no cadastro, não num perfil pronto", async () => {
+    abrir("/app");
+    expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Já tenho conta" })).toBeDefined();
+    // nenhum produto antes de existir uma pessoa
+    expect(screen.queryByText("Seus produtos")).toBeNull();
+  });
+
+  it("nenhuma tela de produto abre sem cadastro", async () => {
+    abrir("/app/moto");
+    expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
+    expect(screen.queryByText("Conecte seus apps")).toBeNull();
+  });
+
+  it("o admin também exige cadastro", async () => {
+    abrir("/app/admin");
+    expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
+  });
+
+  it("cadastro exige nome completo, CPF válido e maioridade", async () => {
+    const usuario = userEvent.setup();
+    abrir("/app");
+    await usuario.click(await screen.findByRole("button", { name: "Criar minha conta" }));
+
+    await usuario.type(screen.getByPlaceholderText("Como no documento"), "Carlos");
+    await usuario.type(screen.getByPlaceholderText("000.000.000-00"), "11111111111");
+    await usuario.click(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(screen.getByText("Nome e sobrenome")).toBeDefined();
+    expect(screen.getByText("CPF inválido")).toBeDefined();
+    expect(screen.getByText(/Confira os campos/)).toBeDefined();
+  });
+
+  it("cadastro completo entra no app com o nome da pessoa", async () => {
+    const usuario = userEvent.setup();
+    abrir("/app");
+    await usuario.click(await screen.findByRole("button", { name: "Criar minha conta" }));
+
+    await usuario.type(screen.getByPlaceholderText("Como no documento"), "Carlos Souza");
+    await usuario.type(screen.getByPlaceholderText("000.000.000-00"), "12345678909");
+    await usuario.type(screen.getByPlaceholderText("(11) 90000-0000"), "11988887777");
+    const nascimento = document.querySelector('input[type="date"]') as HTMLInputElement;
+    await usuario.type(nascimento, "1995-03-10");
+    await usuario.click(screen.getByRole("checkbox"));
+    await usuario.click(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(await screen.findByRole("heading", { name: "Carlos" })).toBeDefined();
+  });
+});
+
 describe("super app", () => {
+  beforeEach(() => comCadastro());
+
   it("monta a tela inicial a partir dos módulos ligados", async () => {
     abrir("/app");
-    expect(await screen.findByRole("heading", { name: "João" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "Carlos" })).toBeDefined();
     // módulos com resumo próprio
     expect(await screen.findByText("Líquido real no mês")).toBeDefined();
     expect(screen.getByText("Abra sua conta BMoto")).toBeDefined();
@@ -80,6 +143,8 @@ describe("super app", () => {
 });
 
 describe("painel de administração", () => {
+  beforeEach(() => comCadastro());
+
   it("mostra o estado da plataforma", async () => {
     abrir("/app/admin");
     expect(await screen.findByRole("heading", { name: "Visão geral" })).toBeDefined();

@@ -12,6 +12,7 @@
 export const BASE = (import.meta.env.VITE_APP_BASE ?? "/app").replace(/\/+$/, "");
 
 export const rotaInicio = (): string => BASE || "/";
+export const rotaEntrada = (): string => `${BASE}/entrar`;
 export const rotaModulo = (moduloId: string): string => `${BASE}/${moduloId}`;
 export const rotaMais = (): string => `${BASE}/mais`;
 export const rotaPerfil = (): string => `${BASE}/perfil`;

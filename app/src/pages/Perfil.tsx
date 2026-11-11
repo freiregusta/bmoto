@@ -6,7 +6,7 @@ import { brl, cpfValido, mascaraCpf, mascaraTelefone } from "@/lib/format";
 import { usePerfil } from "@/platform/PerfilProvider";
 
 export default function Perfil() {
-  const { perfil, carteira, atualizar, limpar } = usePerfil();
+  const { perfil, carteira, atualizar, sair, limpar } = usePerfil();
   const [form, setForm] = useState(perfil);
   const [salvo, setSalvo] = useState(false);
   const cpfRuim = form.cpf.replace(/\D/g, "").length === 11 && !cpfValido(form.cpf);
@@ -91,11 +91,17 @@ export default function Perfil() {
         <SecaoTitulo titulo="Este aparelho"
                      subtitulo="Enquanto não há login, tudo fica salvo só aqui" />
         <div className="flex items-center gap-2">
-          <Chip tom={perfil.cadastrado ? "on" : "off"}>
-            {perfil.cadastrado ? "perfil preenchido" : "perfil de exemplo"}
-          </Chip>
+          <Chip tom="on">conta criada</Chip>
         </div>
-        <button className="btn-ghost mt-4 w-full" onClick={limpar}>
+        <button className="btn-ghost mt-4 w-full" onClick={sair}>
+          <Icone nome="Power" className="h-4 w-4" />
+          Sair desta conta
+        </button>
+        <button className="btn-ghost mt-2 w-full text-danger"
+                onClick={() => {
+                  if (window.confirm("Apagar cadastro, conta, MEI e tudo o mais guardado neste aparelho?"))
+                    limpar();
+                }}>
           <Icone nome="Trash2" className="h-4 w-4" />
           Apagar meus dados deste aparelho
         </button>

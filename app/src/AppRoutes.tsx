@@ -10,13 +10,16 @@
  * rota nova.
  */
 
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { AdminShell } from "./admin/AdminShell";
 import Inicio from "./pages/Inicio";
 import Mais from "./pages/Mais";
 import ModuloPage from "./pages/ModuloPage";
 import Perfil from "./pages/Perfil";
+import Entrada from "./pages/Entrada";
+import { usePerfil } from "./platform/PerfilProvider";
+import { rotaEntrada, rotaInicio } from "./rotas";
 import VisaoGeral from "./admin/VisaoGeral";
 import Conexoes from "./admin/Conexoes";
 import ProdutosCredito from "./admin/ProdutosCredito";
@@ -25,11 +28,21 @@ import Modulos from "./admin/Modulos";
 import Jornadas from "./admin/Jornadas";
 import Auditoria from "./admin/Auditoria";
 
+/** Sem cadastro não há app: quem chega primeiro cria a conta. */
+function ExigeCadastro({ children }: { children: JSX.Element }) {
+  const { autenticado } = usePerfil();
+  return autenticado ? children : <Navigate to={rotaEntrada()} replace />;
+}
+
 export function AppRoutes() {
+  const { autenticado } = usePerfil();
   return (
     <Routes>
+      <Route path="entrar"
+             element={autenticado ? <Navigate to={rotaInicio()} replace /> : <Entrada />} />
+
       {/* estático vence dinâmico no React Router: /admin não cai em :moduloId */}
-      <Route path="admin" element={<AdminShell />}>
+      <Route path="admin" element={<ExigeCadastro><AdminShell /></ExigeCadastro>}>
         <Route index element={<VisaoGeral />} />
         <Route path="conexoes" element={<Conexoes />} />
         <Route path="produtos" element={<ProdutosCredito />} />
@@ -39,7 +52,7 @@ export function AppRoutes() {
         <Route path="auditoria" element={<Auditoria />} />
       </Route>
 
-      <Route element={<Shell />}>
+      <Route element={<ExigeCadastro><Shell /></ExigeCadastro>}>
         <Route index element={<Inicio />} />
         <Route path="mais" element={<Mais />} />
         <Route path="perfil" element={<Perfil />} />

@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { ICONES, PADRAO } from "./icones";
+import logoBMoto from "@/assets/bmoto-logo.svg";
+import iconeBMoto from "@/assets/bmoto-icon.svg";
 
 export function Icone({ nome, className = "h-5 w-5" }: { nome?: string; className?: string }) {
   const Comp = (nome && ICONES[nome]) || PADRAO;
@@ -132,17 +134,11 @@ export function Progresso({ atual, total }: { atual: number; total: number }) {
   );
 }
 
+/** A marca oficial, do arquivo — nada de redesenhar o logo em código. */
 export function Logo({ className = "h-7" }: { className?: string }) {
-  return (
-    <span className={`inline-flex items-end font-display text-2xl font-extrabold leading-none ${className}`}>
-      bm
-      <svg viewBox="0 0 253 132" className="ml-[0.03em] h-[0.62em] w-[1.19em]" aria-hidden="true">
-        <circle cx="50" cy="80" r="32" fill="none" stroke="currentColor" strokeWidth="24" />
-        <circle cx="182" cy="80" r="32" fill="none" stroke="currentColor" strokeWidth="24" />
-        <path d="M103 11H129V124H103Z" fill="#16DFB7" />
-        <path d="M65 7H242a9 9 0 0 1 0 18H54Z" fill="#16DFB7" />
-      </svg>
-      <span className="sr-only">BMoto</span>
-    </span>
-  );
+  return <img src={logoBMoto} alt="BMoto" className={`w-auto ${className}`} />;
+}
+
+export function LogoIcone({ className = "h-10" }: { className?: string }) {
+  return <img src={iconeBMoto} alt="" aria-hidden="true" className={`w-auto ${className}`} />;
 }
