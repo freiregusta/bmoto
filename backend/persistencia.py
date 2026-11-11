@@ -76,6 +76,15 @@ class JsonStore:
             row = cur.fetchone()
         return json.loads(row[0]) if row else None
 
+    def delete(self, chave: str) -> bool:
+        conn, _ = _conectar()
+        with _LOCK:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM {self.tabela} WHERE chave = {self.ph}", (chave,))
+            apagou = cur.rowcount != 0
+            conn.commit()
+        return apagou
+
     def all(self) -> dict[str, dict]:
         conn, _ = _conectar()
         with _LOCK:

@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+  body {
+    @apply bg-navy text-ink font-sans antialiased;
+    background-image:
+      radial-gradient(1100px 500px at 50% -15%, rgba(45, 212, 168, 0.1), transparent 70%),
+      radial-gradient(700px 360px at 110% 10%, rgba(45, 212, 168, 0.05), transparent 65%);
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-tight;
+  }
+  /* o app é usado de luva, no celular, muitas vezes no sol: alvo grande e foco visível */
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply outline-none;
+  }
+  :focus-visible {
+    @apply ring-2 ring-mint/70 ring-offset-2 ring-offset-navy rounded-xl;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-white/10 bg-navy-600/70 p-5 shadow-card backdrop-blur;
+  }
+  .card-tight {
+    @apply rounded-xl border border-white/10 bg-navy-600/70 p-4;
+  }
+  .label {
+    @apply text-xs font-semibold uppercase tracking-wide text-ink-faint;
+  }
+  .input {
+    @apply w-full rounded-xl border border-white/12 bg-navy-500/60 px-4 py-3 text-base
+           text-ink placeholder:text-ink-faint focus:border-mint/60;
+  }
+  .btn {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5
+           text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-mint text-navy hover:bg-mint-600 shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn border border-white/12 bg-white/[.03] text-ink hover:bg-white/[.07];
+  }
+  .btn-sm {
+    @apply min-h-[36px] px-3 text-xs;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[.04]
+           px-2.5 py-1 text-xs font-medium text-ink-muted;
+  }
+  .chip-on {
+    @apply border-mint/40 bg-mint/10 text-mint;
+  }
+  .chip-off {
+    @apply border-white/10 bg-white/[.03] text-ink-faint;
+  }
+  .chip-warn {
+    @apply border-warn/40 bg-warn/10 text-warn;
+  }
+  .chip-danger {
+    @apply border-danger/40 bg-danger/10 text-danger;
+  }
+}

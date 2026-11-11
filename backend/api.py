@@ -413,6 +413,14 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     app.include_router(portal_rh_router)
     app.include_router(risco_router)
 
+    # Plataforma plugável (ports/adapters): produtos do ecossistema, admin e jornadas
+    from plataforma.router import router as plataforma_router
+    from plataforma.admin_router import router as admin_router
+    from plataforma.jornada_router import router as jornada_router
+    app.include_router(plataforma_router)
+    app.include_router(admin_router)
+    app.include_router(jornada_router)
+
     # Origens liberadas: defaults de produção + extras via env (CORS_ORIGINS).
     # Garante que o site nunca caia silenciosamente por env esquecida.
     _default_origins = [
