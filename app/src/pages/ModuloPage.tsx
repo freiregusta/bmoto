@@ -8,6 +8,7 @@
 
 import { useParams } from "react-router-dom";
 import { Card, Carregando, Vazio } from "@/components/ui";
+import { Indisponivel } from "@/components/Indisponivel";
 import { JornadaRunner } from "@/components/JornadaRunner";
 import { usePlataforma } from "@/platform/PlatformProvider";
 import { obterModulo } from "@/platform/registry";
@@ -26,19 +27,15 @@ export default function ModuloPage() {
       </Vazio>
     );
 
-  if (!modulo.enabled)
+  // Desligado ou sem fornecedor: a mesma verdade, dita do mesmo jeito.
+  if (!modulo.enabled || !modulo.pronto)
     return (
-      <Vazio icone="Clock" titulo={`${modulo.titulo} ainda não está no ar`}>
-        {modulo.descricao} Assim que for liberado, aparece aqui.
-      </Vazio>
-    );
-
-  if (!modulo.pronto)
-    return (
-      <Vazio icone="PlugZap" titulo={`${modulo.titulo} está sem fornecedor`}>
-        O módulo está ligado, mas o fornecedor conectado não entrega tudo o que ele precisa.
-        Resolva em Admin → Conexões.
-      </Vazio>
+      <div className="space-y-5">
+        <header>
+          <h1 className="text-xl font-bold">{modulo.titulo}</h1>
+        </header>
+        <Indisponivel modulo={modulo} />
+      </div>
     );
 
   const def = obterModulo(modulo.id);

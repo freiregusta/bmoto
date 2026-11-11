@@ -152,10 +152,14 @@ def test_emissor_precisa_ser_conexao_de_credito(cat):
 
 # ------------------------------------------------------- apps de entrega
 
-def test_cadastrar_app_entrega_e_provider(cat):
-    a = cat.salvar_app_entrega({"nome": "iFood", "tipo_integracao": "api", "ordem": 10})
-    assert a.slug == "ifood"
-    assert cat.provider_app_entrega(a.id).nome == "iFood"
+def test_app_sem_integracao_nao_inventa_renda(cat):
+    """Sem contrato de integração, não existe provider: a renda vem do que o
+    entregador lança. Melhor não ter resposta do que ter uma inventada."""
+    from plataforma.registry import ProvedorNaoConfigurado
+    a = cat.salvar_app_entrega({"nome": "iFood", "tipo_integracao": "declarado", "ordem": 10})
+    assert a.slug == "ifood" and a.provider_tipo == "nenhum"
+    with pytest.raises(ProvedorNaoConfigurado, match="iFood"):
+        cat.provider_app_entrega(a.id)
     with pytest.raises(ValueError, match="tipo_integracao"):
         cat.salvar_app_entrega({"nome": "X", "tipo_integracao": "telepatia"})
     with pytest.raises(ValueError, match="ler_renda"):

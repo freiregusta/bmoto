@@ -1,8 +1,10 @@
 /**
- * Teste de integração da interface: sem backend, no modo demo.
+ * Teste de integração da interface, sem servidor.
  *
- * O que ele prova é a tese da arquitetura — a navegação e as telas saem dos
- * manifestos, e um módulo sem tela dedicada é vendido pela jornada.
+ * O que ele prova é a regra que vale agora: o que o entregador lança funciona
+ * offline e é dele; o que depende de fornecedor aparece como indisponível,
+ * com a dependência à mostra. Em nenhum lugar o app inventa saldo, renda ou
+ * aprovação.
  */
 
 import { render, screen, within } from "@testing-library/react";
@@ -18,7 +20,6 @@ const abrir = (rota: string) =>
     </MemoryRouter>,
   );
 
-/** Quem já criou conta neste aparelho — o app guarda em localStorage. */
 function comCadastro(nome = "Carlos Souza") {
   localStorage.setItem(
     "bmoto.perfil",
@@ -28,165 +29,156 @@ function comCadastro(nome = "Carlos Souza") {
   );
 }
 
+function comGanhos(meses = [["2026-09", 3000], ["2026-10", 3200], ["2026-11", 3400]] as const) {
+  localStorage.setItem("bmoto.ganhos", JSON.stringify(
+    meses.map(([competencia, bruto]) => ({ app: "ifood", competencia, bruto,
+                                           corridas: 180, km: 1800, horas: 120 }))));
+}
+
+function comCustos() {
+  localStorage.setItem("bmoto.custos", JSON.stringify({
+    consumo_km_l: 35, preco_combustivel: 6.19, custo_oleo: 60, km_troca_oleo: 2000,
+    valor_moto: 18000, vida_util_km: 120000, das_mei: 86.05,
+  }));
+}
+
 describe("primeira vez no app", () => {
-  it("quem acabou de instalar cai no cadastro, não num perfil pronto", async () => {
+  it("quem acabou de instalar cai no cadastro", async () => {
     abrir("/app");
     expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Já tenho conta" })).toBeDefined();
-    // nenhum produto antes de existir uma pessoa
-    expect(screen.queryByText("Seus produtos")).toBeNull();
+    expect(screen.queryByText("O que já funciona")).toBeNull();
   });
 
-  it("nenhuma tela de produto abre sem cadastro", async () => {
-    abrir("/app/moto");
-    expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
-    expect(screen.queryByText("Conecte seus apps")).toBeNull();
-  });
-
-  it("o admin também exige cadastro", async () => {
-    abrir("/app/admin");
+  it("nenhuma tela abre sem cadastro", async () => {
+    abrir("/app/ganhos");
     expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
   });
 
-  it("cadastro exige nome completo, CPF válido e maioridade", async () => {
+  it("cadastro completo entra com o nome da pessoa", async () => {
     const usuario = userEvent.setup();
     abrir("/app");
     await usuario.click(await screen.findByRole("button", { name: "Criar minha conta" }));
-
-    await usuario.type(screen.getByPlaceholderText("Como no documento"), "Carlos");
-    await usuario.type(screen.getByPlaceholderText("000.000.000-00"), "11111111111");
-    await usuario.click(screen.getByRole("button", { name: "Criar conta" }));
-
-    expect(screen.getByText("Nome e sobrenome")).toBeDefined();
-    expect(screen.getByText("CPF inválido")).toBeDefined();
-    expect(screen.getByText(/Confira os campos/)).toBeDefined();
-  });
-
-  it("cadastro completo entra no app com o nome da pessoa", async () => {
-    const usuario = userEvent.setup();
-    abrir("/app");
-    await usuario.click(await screen.findByRole("button", { name: "Criar minha conta" }));
-
     await usuario.type(screen.getByPlaceholderText("Como no documento"), "Carlos Souza");
     await usuario.type(screen.getByPlaceholderText("000.000.000-00"), "12345678909");
     await usuario.type(screen.getByPlaceholderText("(11) 90000-0000"), "11988887777");
-    const nascimento = document.querySelector('input[type="date"]') as HTMLInputElement;
-    await usuario.type(nascimento, "1995-03-10");
+    await usuario.type(document.querySelector('input[type="date"]')!, "1995-03-10");
     await usuario.click(screen.getByRole("checkbox"));
     await usuario.click(screen.getByRole("button", { name: "Criar conta" }));
-
     expect(await screen.findByRole("heading", { name: "Carlos" })).toBeDefined();
   });
 });
 
-describe("super app", () => {
+describe("quem ainda não lançou nada", () => {
   beforeEach(() => comCadastro());
 
-  it("monta a tela inicial a partir dos módulos ligados", async () => {
+  it("não vê número nenhum inventado na tela inicial", async () => {
     abrir("/app");
     expect(await screen.findByRole("heading", { name: "Carlos" })).toBeDefined();
-    // módulos com resumo próprio
-    expect(await screen.findByText("Líquido real no mês")).toBeDefined();
-    expect(screen.getByText("Abra sua conta BMoto")).toBeDefined();
-    // atalhos dos módulos sem tela dedicada
-    expect(screen.getByText("Financiamento de moto")).toBeDefined();
-    expect(screen.getByText("Cartão com garantia da moto")).toBeDefined();
-    // o consignado está desligado: aparece como "em breve", não como produto
-    const emBreve = screen.getByText("Em breve").closest("section")!;
-    expect(within(emBreve).queryByText(/Consignado CLT/)).toBeNull();
+    expect(screen.getByText("Lance seus ganhos")).toBeDefined();
+    // nada de saldo, renda ou líquido antes de existir dado
+    expect(screen.queryByText(/R\$/)).toBeNull();
   });
 
-  it("avisa que está em modo demonstração quando não há backend", async () => {
-    abrir("/app");
-    expect(await screen.findByTitle(/Backend não encontrado/)).toBeDefined();
-  });
-
-  it("um módulo sem tela dedicada é vendido pela jornada configurada", async () => {
-    const usuario = userEvent.setup();
-    abrir("/app/moto");
-
-    expect(await screen.findByRole("heading", { name: "Financiamento de moto" })).toBeDefined();
-    // primeiro passo da jornada do seed: conectar apps
-    expect(await screen.findByText("Conecte seus apps")).toBeDefined();
-    // 9 passos no total, mas o do seguro é condicional e ainda não é elegível
-    expect(screen.getByText(/Passo 1 de 8/)).toBeDefined();
-
-    await usuario.click(screen.getByRole("button", { name: /iFood/ }));
-    await usuario.click(screen.getByRole("button", { name: /^Conectar/ }));
-
-    // renda é passo automático: avança sozinho e chega no formulário da moto
-    expect(await screen.findByText("A moto", {}, { timeout: 3000 })).toBeDefined();
-    expect(screen.getByText("Valor da moto")).toBeDefined();
-  });
-
-  it("módulo desligado explica em vez de dar erro", async () => {
-    abrir("/app/consignado_clt");
-    expect(await screen.findByText(/ainda não está no ar/)).toBeDefined();
-  });
-
-  it("módulo inexistente não quebra a navegação", async () => {
-    abrir("/app/cripto");
-    expect(await screen.findByText("Produto não encontrado")).toBeDefined();
-  });
-
-  it("a tela da margem calcula a corrida na hora", async () => {
-    const usuario = userEvent.setup();
+  it("a margem pede os ganhos antes de calcular", async () => {
     abrir("/app/margem");
+    expect(await screen.findByText("Lance seus ganhos primeiro")).toBeDefined();
+  });
 
+  it("a simulação de crédito pede a renda real", async () => {
+    abrir("/app/credito");
+    expect(await screen.findByText("Simule com a sua renda, não com um chute")).toBeDefined();
+  });
+});
+
+describe("ganhos lançados pelo entregador", () => {
+  beforeEach(() => comCadastro());
+
+  it("lança um período e passa a somar", async () => {
+    const usuario = userEvent.setup();
+    abrir("/app/ganhos");
+
+    expect(await screen.findByText("Comece lançando o que você recebeu")).toBeDefined();
+    await usuario.type(screen.getByPlaceholderText("0,00"), "3200");
+    await usuario.click(screen.getByRole("button", { name: "Lançar" }));
+
+    // aparece no total do período e na lista do que foi lançado
+    expect((await screen.findAllByText("R$ 3.200,00")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Salvo só neste aparelho/)).toBeDefined();
+  });
+
+  it("sem custos, mostra o bruto e diz que falta o custo", async () => {
+    comGanhos();
+    abrir("/app/margem");
+    expect(await screen.findByText("Falta quanto custa rodar")).toBeDefined();
+    expect(screen.getByText("R$ 9.600,00")).toBeDefined();        // 3 meses lançados
+  });
+
+  it("com custos, calcula o líquido real", async () => {
+    comGanhos();
+    comCustos();
+    abrir("/app/margem");
+    expect(await screen.findByText("Sobrou de verdade")).toBeDefined();
+    // 9.600 lançados − (5.400 km × R$ 0,3569) − 3 × DAS de R$ 86,05
+    expect(screen.getByText("R$ 7.414,59")).toBeDefined();
+    expect(screen.getByText("Para onde foi o dinheiro")).toBeDefined();
+  });
+
+  it("a conta da corrida usa o custo por km do próprio entregador", async () => {
+    const usuario = userEvent.setup();
+    comGanhos();
+    comCustos();
+    abrir("/app/margem");
     await usuario.click(await screen.findByRole("button", { name: "Vale a pena?" }));
     await usuario.type(screen.getByPlaceholderText("12,50"), "12,50");
     await usuario.type(screen.getByPlaceholderText("7,2"), "7");
-
     expect(await screen.findByText("Vale a pena")).toBeDefined();
-    expect(screen.getByText("Seu custo")).toBeDefined();
+  });
+});
+
+describe("o que depende de fornecedor", () => {
+  beforeEach(() => comCadastro());
+
+  it("a conta diz o que falta, em vez de mostrar saldo", async () => {
+    abrir("/app/conta");
+    expect(await screen.findByText(/Conta BMoto ainda não está no ar/)).toBeDefined();
+    expect(screen.getByText(/BaaS contratado/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Me avise quando chegar" })).toBeDefined();
+    expect(screen.queryByText(/Saldo/)).toBeNull();
+  });
+
+  it("a MEI diz que depende do Serpro, sem forjar DAS", async () => {
+    abrir("/app/mei");
+    expect(await screen.findByText(/Integra Contador \(Serpro\)/)).toBeDefined();
+    expect(screen.queryByText(/código de barras/i)).toBeNull();
+  });
+
+  it("o financiamento aponta para a simulação, que é o que existe hoje", async () => {
+    abrir("/app/moto");
+    expect(await screen.findByText(/SCD\/emissor/)).toBeDefined();
+    expect(screen.getByText(/Simule quanto caberia/)).toBeDefined();
+  });
+
+  it("aparecem na tela inicial como em construção, não como produto", async () => {
+    abrir("/app");
+    const secao = (await screen.findByText("Ainda não está no ar")).closest("section")!;
+    expect(within(secao).getByText("Conta BMoto")).toBeDefined();
+    expect(within(secao).getAllByText("em construção").length).toBeGreaterThan(3);
   });
 });
 
 describe("painel de administração", () => {
   beforeEach(() => comCadastro());
 
-  it("mostra o estado da plataforma", async () => {
+  it("sem servidor, não inventa catálogo", async () => {
     abrir("/app/admin");
+    expect(await screen.findByText(/Sem conexão com o servidor/)).toBeDefined();
     expect(await screen.findByRole("heading", { name: "Visão geral" })).toBeDefined();
-    expect(await screen.findByText("Módulos ligados")).toBeDefined();
-    expect(screen.getByText(/Nenhuma. Todo módulo ligado tem fornecedor capaz./)).toBeDefined();
+    expect(screen.getByText("Catálogo vazio")).toBeDefined();
   });
 
-  it("lista as conexões por capacidade e oferece o cadastro sem código", async () => {
-    const usuario = userEvent.setup();
+  it("a tela de conexões não lista fornecedor que não existe", async () => {
     abrir("/app/admin/conexoes");
-
     expect(await screen.findByRole("heading", { name: "Conexões" })).toBeDefined();
-    expect(await screen.findByText(/Port "conta"/)).toBeDefined();
-
-    await usuario.click(screen.getByRole("button", { name: /Nova conexão/ }));
-    expect(await screen.findByRole("heading", { name: "Nova conexão" })).toBeDefined();
-
-    // o formulário vem dos campos que o backend declara para o tipo REST
-    await usuario.selectOptions(screen.getByLabelText(/Fornecedor/),
-                                "rest");
-    expect(await screen.findByText("URL base da API")).toBeDefined();
-    expect(screen.getByText("Operações")).toBeDefined();
-    // escopo por módulo é o que permite um BaaS diferente por produto
-    const escopo = screen.getByLabelText(/Onde vale/) as HTMLSelectElement;
-    const opcoes = [...escopo.options].map((o) => o.value);
-    expect(opcoes).toContain("produto:cartao");
-    expect(opcoes).toContain("produto:moto");
-  });
-
-  it("deixa montar uma jornada passo a passo", async () => {
-    const usuario = userEvent.setup();
-    abrir("/app/admin/jornadas");
-
-    expect(await screen.findByRole("heading", { name: "Jornadas" })).toBeDefined();
-    await usuario.click(screen.getByRole("button", { name: /Nova jornada/ }));
-    await usuario.click(screen.getByRole("button", { name: /Ler renda/ }));
-    await usuario.click(screen.getByRole("button", { name: /Oferta/ }));
-
-    expect(screen.getByDisplayValue("Analisando seus ganhos")).toBeDefined();
-    expect(screen.getByDisplayValue("Sua oferta")).toBeDefined();
-    // o editor do passo de oferta lista os produtos de crédito cadastrados
-    expect(screen.getAllByText("Financiamento de moto nova").length)
-      .toBeGreaterThan(0);
+    expect(screen.queryByText(/\(mock\)/)).toBeNull();
   });
 });

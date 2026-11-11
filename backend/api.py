@@ -417,7 +417,9 @@ def make_app(service: Optional[OriginadoraService] = None) -> FastAPI:
     from plataforma.router import router as plataforma_router
     from plataforma.admin_router import router as admin_router
     from plataforma.jornada_router import router as jornada_router
+    from plataforma.ganhos_router import router as ganhos_router
     app.include_router(plataforma_router)
+    app.include_router(ganhos_router)
     app.include_router(admin_router)
     app.include_router(jornada_router)
 

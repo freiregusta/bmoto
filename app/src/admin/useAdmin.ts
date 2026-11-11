@@ -1,15 +1,16 @@
 /**
- * useAdmin — leitura e escrita do catálogo, com modo demo.
+ * useAdmin — leitura e escrita do catálogo.
+ *
+ * Sem servidor o painel fica vazio e diz isso. Mostrar um catálogo local aqui
+ * seria pior do que inútil: o administrador acharia que cadastrou fornecedor
+ * quando não cadastrou nada.
  *
  * Um hook genérico (`useRecurso`) resolve carregar/recarregar/erro para todas
  * as telas do painel, para cada uma só cuidar do seu formulário.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { api, comDemo } from "@/lib/api";
-import {
-  APPS_DEMO, CONEXOES_DEMO, JORNADAS_DEMO, PRODUTOS_CREDITO_DEMO, TIPOS_DEMO, resumoDemo,
-} from "@/platform/demo";
+import { api, comFallback } from "@/lib/api";
 import type {
   AppEntrega, Conexao, Jornada, Modulo, ProdutoCredito, RegistroAuditoria, Resumo, TiposAdmin,
 } from "@/platform/types";
@@ -31,7 +32,7 @@ export function useRecurso<T>(buscar: () => Promise<T>, fallback: () => T, deps:
     setCarregando(true);
     setErro(null);
     try {
-      setDados(await comDemo(buscar, fallback));
+      setDados(await comFallback(buscar, fallback));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "falha ao carregar");
       setDados(fallback());
@@ -48,32 +49,45 @@ export function useRecurso<T>(buscar: () => Promise<T>, fallback: () => T, deps:
   return { dados, carregando, erro, recarregar: carregar };
 }
 
+const VAZIO_RESUMO: Resumo = {
+  modulos: { total: 0, ligados: 0, prontos: 0 },
+  conexoes: { total: 0, ativas: 0 },
+  produtos_credito: { total: 0, ativos: 0 },
+  apps_entrega: { total: 0, ativos: 0 },
+  jornadas: 0,
+  pendencias: [],
+};
+
+const VAZIO_TIPOS: TiposAdmin = {
+  ports: [], adapters: [], tipos_produto_credito: [], tipos_integracao_app: [], tipos_passo: [],
+};
+
 export const useResumo = () =>
-  useRecurso<Resumo>(() => api.get("/admin/resumo"), resumoDemo);
+  useRecurso<Resumo>(() => api.get("/admin/resumo"), () => VAZIO_RESUMO);
 
 export const useTipos = () =>
-  useRecurso<TiposAdmin>(() => api.get("/admin/tipos"), () => TIPOS_DEMO);
+  useRecurso<TiposAdmin>(() => api.get("/admin/tipos"), () => VAZIO_TIPOS);
 
 export const useConexoes = () =>
   useRecurso<{ conexoes: Conexao[] }>(() => api.get("/admin/conexoes"),
-                                      () => ({ conexoes: CONEXOES_DEMO }));
+                                      () => ({ conexoes: [] }));
 
 export const useProdutosCredito = () =>
   useRecurso<{ produtos: ProdutoCredito[] }>(() => api.get("/admin/produtos-credito"),
-                                             () => ({ produtos: PRODUTOS_CREDITO_DEMO }));
+                                             () => ({ produtos: [] }));
 
 export const useApps = () =>
   useRecurso<{ apps: AppEntrega[] }>(() => api.get("/admin/apps-entrega"),
-                                     () => ({ apps: APPS_DEMO }));
+                                     () => ({ apps: [] }));
 
 export const useJornadas = () =>
   useRecurso<{ jornadas: Jornada[] }>(() => api.get("/admin/jornadas"),
-                                      () => ({ jornadas: JORNADAS_DEMO }));
+                                      () => ({ jornadas: [] }));
 
 export const useModulosAdmin = () =>
   useRecurso<{ modulos: Modulo[]; jornadas: Array<{ id: string; nome: string; modulo_id: string | null }> }>(
     () => api.get("/admin/modulos"),
-    () => ({ modulos: [], jornadas: JORNADAS_DEMO.map((j) => ({ id: j.id, nome: j.nome, modulo_id: j.modulo_id ?? null })) }),
+    () => ({ modulos: [], jornadas: [] }),
   );
 
 export const useAuditoria = () =>

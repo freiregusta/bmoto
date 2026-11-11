@@ -41,11 +41,13 @@ class AdapterSpec:
     descricao: str = ""
     campos: tuple[CampoConfig, ...] = ()
     sem_codigo: bool = False         # True = cadastrável 100% pela tela
+    simulado: bool = False           # True = INVENTA resposta; nunca em produção
     capabilities_fixas: Optional[tuple[Capability, ...]] = None
 
     def to_dict(self) -> dict:
         return {"tipo": self.tipo, "titulo": self.titulo, "ports": list(self.ports),
                 "descricao": self.descricao, "sem_codigo": self.sem_codigo,
+                "simulado": self.simulado,
                 "campos": [{"chave": c.chave, "titulo": c.titulo, "tipo": c.tipo,
                             "obrigatorio": c.obrigatorio, "ajuda": c.ajuda,
                             "opcoes": list(c.opcoes), "default": c.default}
@@ -81,9 +83,11 @@ CAMPOS_CELCOIN: tuple[CampoConfig, ...] = (
 )
 
 CATALOGO: tuple[AdapterSpec, ...] = (
-    AdapterSpec("mock", "Mock (demo, sem credencial)", tuple(PORTS),
-                "Roda o produto inteiro sem fornecedor. Use para demo, homologação "
-                "interna e testes automatizados."),
+    AdapterSpec("mock", "Simulador (apenas testes)", tuple(PORTS),
+                "INVENTA as respostas. Serve para testes automatizados e nada mais: "
+                "nenhum número que sai daqui é real, então não vai para a mão de "
+                "entregador nenhum. Em produção, um port sem fornecedor responde 503.",
+                simulado=True),
     AdapterSpec("rest", "REST genérico (cadastro pela tela)", tuple(PORTS),
                 "Descreva a API do fornecedor em JSON e ele passa a atender o módulo. "
                 "Nenhum deploy necessário.", CAMPOS_REST, sem_codigo=True),

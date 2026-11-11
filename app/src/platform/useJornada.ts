@@ -8,8 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, comDemo } from "@/lib/api";
-import { avancarDemo, estadoDemo, iniciarDemo, jornadaDoModuloDemo } from "./demo";
+import { api } from "@/lib/api";
 import type { EstadoJornada, Jornada } from "./types";
 
 const PAUSA_AUTOMATICO_MS = 650;
@@ -48,10 +47,7 @@ export function useJornada(moduloId: string, cpf: string): UseJornada {
     let cancelado = false;
     setCarregando(true);
     setErro(null);
-    comDemo(
-      () => api.get<Jornada>(`/jornadas/modulo/${moduloId}`),
-      () => jornadaDoModuloDemo(moduloId) ?? null,
-    )
+    api.get<Jornada>(`/jornadas/modulo/${moduloId}`)
       .then((j) => {
         if (!cancelado) setJornada(j);
       })
@@ -72,10 +68,8 @@ export function useJornada(moduloId: string, cpf: string): UseJornada {
       setEnviando(true);
       setErro(null);
       try {
-        const st = await comDemo(
-          () => api.post<EstadoJornada>(`/jornadas/${jornada.id}/iniciar`, { cpf, contexto }),
-          () => iniciarDemo(jornada.id, cpf, contexto),
-        );
+        const st = await api.post<EstadoJornada>(
+          `/jornadas/${jornada.id}/iniciar`, { cpf, contexto });
         if (vivo.current) setEstado(st);
       } catch (e) {
         if (vivo.current) setErro(mensagem(e));
@@ -92,13 +86,8 @@ export function useJornada(moduloId: string, cpf: string): UseJornada {
       setEnviando(true);
       setErro(null);
       try {
-        const st = await comDemo(
-          () =>
-            api.post<EstadoJornada>(`/jornadas/execucao/${estado.execucao_id}/avancar`, {
-              resposta,
-            }),
-          () => avancarDemo(estado.execucao_id, resposta),
-        );
+        const st = await api.post<EstadoJornada>(
+          `/jornadas/execucao/${estado.execucao_id}/avancar`, { resposta });
         if (vivo.current) setEstado(st);
       } catch (e) {
         if (vivo.current) setErro(mensagem(e));
@@ -132,10 +121,7 @@ export function useJornada(moduloId: string, cpf: string): UseJornada {
 }
 
 export async function recarregarEstado(execucaoId: string): Promise<EstadoJornada> {
-  return comDemo(
-    () => api.get<EstadoJornada>(`/jornadas/execucao/${execucaoId}`),
-    () => estadoDemo(execucaoId),
-  );
+  return api.get<EstadoJornada>(`/jornadas/execucao/${execucaoId}`);
 }
 
 function mensagem(e: unknown): string {

@@ -4,7 +4,8 @@ import { afterEach, beforeEach, vi } from "vitest";
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  // Sem backend: o app cai no modo demo, que é o que os testes exercitam.
+  // Sem backend: os testes exercitam exatamente o caminho local — o que o
+  // entregador lança continua funcionando, o resto aparece como indisponível.
   vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("sem rede nos testes"))));
 });
 

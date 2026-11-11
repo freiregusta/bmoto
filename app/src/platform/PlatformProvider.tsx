@@ -7,19 +7,22 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { api, comDemo } from "@/lib/api";
-import { MODULOS_DEMO } from "./demo";
+import { api, comFallback } from "@/lib/api";
+import { CATALOGO_LOCAL } from "./catalogo-local";
 import type { Modulo } from "./types";
 
 interface PlatformCtx {
   modulos: Modulo[];
   /** Ligados e com fornecedor capaz — é o que entra na navegação. */
   disponiveis: Modulo[];
+  /** Ligados mas sem fornecedor: existem no plano, não na vida ainda. */
+  aguardandoFornecedor: Modulo[];
   porId: (id: string) => Modulo | undefined;
   ligado: (id: string) => boolean;
   carregando: boolean;
   erro: string | null;
-  modoDemo: boolean;
+  /** O servidor não respondeu: o catálogo é local e nada de produto é real. */
+  semServidor: boolean;
   recarregar: () => Promise<void>;
 }
 
@@ -29,26 +32,26 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   const [modulos, setModulos] = useState<Modulo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [modoDemo, setModoDemo] = useState(false);
+  const [semServidor, setSemServidor] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(null);
     try {
-      let demo = false;
-      const dados = await comDemo(
+      let offline = false;
+      const dados = await comFallback(
         () => api.get<{ modules: Modulo[] }>("/platform/modules"),
         () => {
-          demo = true;
-          return { modules: MODULOS_DEMO };
+          offline = true;
+          return { modules: CATALOGO_LOCAL };
         },
       );
-      setModoDemo(demo);
+      setSemServidor(offline);
       setModulos([...dados.modules].sort((a, b) => a.ordem - b.ordem));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "falha ao carregar os módulos");
-      setModulos(MODULOS_DEMO);
-      setModoDemo(true);
+      setModulos(CATALOGO_LOCAL);
+      setSemServidor(true);
     } finally {
       setCarregando(false);
     }
@@ -63,14 +66,15 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     return {
       modulos,
       disponiveis: modulos.filter((m) => m.enabled && m.pronto),
+      aguardandoFornecedor: modulos.filter((m) => m.enabled && !m.pronto),
       porId,
       ligado: (id: string) => Boolean(porId(id)?.enabled),
       carregando,
       erro,
-      modoDemo,
+      semServidor,
       recarregar: carregar,
     };
-  }, [modulos, carregando, erro, modoDemo, carregar]);
+  }, [modulos, carregando, erro, semServidor, carregar]);
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }

@@ -1,18 +1,22 @@
 /**
  * modules/index.ts — onde as telas dedicadas entram no app.
  *
- * Esta é a ÚNICA lista de telas do produto. Módulos que não estão aqui rodam
- * pela jornada genérica — é de propósito: moto, cartão, seguro e saúde são
- * vendidos hoje pelo `JornadaRunner`, e ganham tela própria quando a jornada
- * deixar de dar conta. Para trocar, escreva o componente e acrescente aqui.
+ * Só entra aqui o que é real hoje: os ganhos que o entregador lança, a margem
+ * em cima deles e a simulação de crédito sobre essa renda.
+ *
+ * Conta, MEI, moto, cartão, seguro e saúde NÃO têm tela própria de propósito:
+ * dependem de fornecedor contratado. Enquanto não houver, o `ModuloPage`
+ * mostra a dependência real e a lista de espera — nada de saldo, CNPJ ou
+ * apólice de mentira. Quando o fornecedor entrar, o módulo fica `pronto` e
+ * passa a rodar a jornada configurada no admin; a tela dedicada, se valer a
+ * pena, é só registrar aqui.
  */
 
 import { registrarModulos } from "@/platform/registry";
-import { moduloConta } from "./conta";
+import { moduloCredito } from "./credito";
 import { moduloGanhos } from "./ganhos";
 import { moduloMargem } from "./margem";
-import { moduloMei } from "./mei";
 
 export function registrarTodosOsModulos(): void {
-  registrarModulos([moduloConta, moduloGanhos, moduloMargem, moduloMei]);
+  registrarModulos([moduloGanhos, moduloMargem, moduloCredito]);
 }

@@ -27,6 +27,31 @@ import os
 from typing import Callable, Optional
 
 from .ports import PORTS, Capability, HealthStatus, Provider
+
+
+class ProvedorNaoConfigurado(RuntimeError):
+    """Não há fornecedor para este port. NÃO se inventa resposta: o app
+    precisa dizer à pessoa que aquilo ainda não existe."""
+
+    def __init__(self, port: str, dependencia: str = "") -> None:
+        self.port = port
+        self.dependencia = dependencia or DEPENDENCIA.get(port, "um fornecedor contratado")
+        super().__init__(
+            f"Nenhum fornecedor ativo para '{port}'. Depende de {self.dependencia}. "
+            f"Cadastre em /admin/conexoes.")
+
+
+# O que cada capacidade exige do mundo real para deixar de ser promessa.
+DEPENDENCIA = {
+    "conta": "um BaaS contratado (conta individual e Pix)",
+    "cartao": "um emissor de cartão contratado",
+    "kyc": "um fornecedor de verificação de identidade",
+    "credito": "a SCD/emissor e o funding",
+    "seguro": "uma seguradora parceira e registro de representante (CNSP 431)",
+    "saude": "uma operadora ou administradora de benefícios",
+    "contador": "o Integra Contador (Serpro), com e-CNPJ e procuração e-CAC",
+    "renda": "Open Finance por participante certificado, ou integração com a plataforma",
+}
 from .produtos import PRODUTOS, ProdutoManifest
 
 Factory = Callable[[], Provider]
@@ -61,8 +86,13 @@ class ProviderRegistry:
         return sorted(self._factories[port])
 
     # -- resolução ---------------------------------------------------------
-    def nome_ativo(self, port: str) -> str:
-        return os.getenv(ENV_POR_PORT[port], "mock").strip().lower()
+    def nome_ativo(self, port: str) -> Optional[str]:
+        """Fornecedor escolhido por env. Sem env, NÃO há padrão: o mock só
+        entra com PROVEDORES_MOCK=1 (testes e desenvolvimento local)."""
+        v = os.getenv(ENV_POR_PORT[port], "").strip().lower()
+        if v:
+            return v
+        return "mock" if os.getenv("PROVEDORES_MOCK", "").strip() in ("1", "true", "on") else None
 
     def resolver(self, port: str, produto_id: Optional[str] = None) -> Provider:
         """Ordem: conexão cadastrada no admin > variável de ambiente > mock."""
@@ -72,6 +102,8 @@ class ProviderRegistry:
             if prov is not None:
                 return prov
         nome = self.nome_ativo(port)
+        if nome is None:
+            raise ProvedorNaoConfigurado(port)
         chave = f"{port}:{nome}"
         if chave in self._cache:
             return self._cache[chave]
@@ -95,9 +127,11 @@ class ProviderRegistry:
     def tabela(self) -> list[dict]:
         out = []
         for p in PORTS:
+            nome = self.nome_ativo(p)
             linha = {"port": p, "env": ENV_POR_PORT[p], "disponiveis": self.disponiveis(p),
-                     "ativo": self.nome_ativo(p), "origem": "env" if os.getenv(ENV_POR_PORT[p])
-                     else "default"}
+                     "ativo": nome, "dependencia": DEPENDENCIA.get(p, ""),
+                     "origem": "env" if os.getenv(ENV_POR_PORT[p])
+                               else ("mock_dev" if nome else "nenhum")}
             if self.consultar_catalogo:
                 from .catalogo import catalogo
                 c = catalogo.conexao_ativa(p)
@@ -113,7 +147,7 @@ class ProviderRegistry:
             try:
                 out.append(await self.resolver(port).health())
             except Exception as e:  # adapter ausente ou quebrado não derruba o endpoint
-                out.append(HealthStatus(provider=self.nome_ativo(port), port=port,
+                out.append(HealthStatus(provider=self.nome_ativo(port) or "nenhum", port=port,
                                         ok=False, detalhe=str(e)))
         return out
 

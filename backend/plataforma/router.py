@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .ports import Pessoa
-from .registry import plataforma
+from .registry import ProvedorNaoConfigurado, plataforma
 
 router = APIRouter(prefix="/platform", tags=["plataforma"])
 
@@ -79,6 +79,12 @@ def _guard(coro):
     async def run():
         try:
             return await coro
+        except ProvedorNaoConfigurado as e:
+            # 503 e a dependência explícita. O app mostra isso à pessoa em vez
+            # de exibir um número que não existe.
+            raise HTTPException(503, {"erro": "fornecedor_nao_configurado",
+                                      "port": e.port, "dependencia": e.dependencia,
+                                      "mensagem": str(e)})
         except KeyError as e:
             raise HTTPException(404, str(e))
         except (ValueError, NotImplementedError) as e:
@@ -114,33 +120,41 @@ def verificar():
 
 # -- conta ------------------------------------------------------------------
 
+def _prov(fn, *a):
+    try:
+        return fn(*a)
+    except ProvedorNaoConfigurado as e:
+        raise HTTPException(503, {"erro": "fornecedor_nao_configurado", "port": e.port,
+                                  "dependencia": e.dependencia, "mensagem": str(e)})
+
+
 @router.post("/conta/abrir")
 async def conta_abrir(p: PessoaIn):
     _exige_produto("conta")
-    kyc = await _guard(plataforma.kyc().validar(p.to_port()))
+    kyc = await _guard(_prov(plataforma.kyc).validar(p.to_port()))
     if not kyc.aprovado:
         raise HTTPException(422, {"kyc": asdict(kyc)})
-    conta = await _guard(plataforma.conta().abrir_conta(p.to_port()))
+    conta = await _guard(_prov(plataforma.conta).abrir_conta(p.to_port()))
     return {"conta": asdict(conta), "kyc": asdict(kyc)}
 
 
 @router.get("/conta/{conta_id}/saldo")
 async def conta_saldo(conta_id: str):
     _exige_produto("conta")
-    return {"conta_id": conta_id, "saldo": await _guard(plataforma.conta().saldo(conta_id))}
+    return {"conta_id": conta_id, "saldo": await _guard(_prov(plataforma.conta).saldo(conta_id))}
 
 
 @router.get("/conta/{conta_id}/extrato")
 async def conta_extrato(conta_id: str, desde: Optional[str] = None):
     _exige_produto("conta")
-    ls = await _guard(plataforma.conta().extrato(conta_id, desde))
+    ls = await _guard(_prov(plataforma.conta).extrato(conta_id, desde))
     return {"conta_id": conta_id, "lancamentos": [asdict(l) for l in ls]}
 
 
 @router.post("/conta/{conta_id}/pix")
 async def conta_pix(conta_id: str, body: PixIn):
     _exige_produto("conta")
-    pg = await _guard(plataforma.conta().pix_enviar(conta_id, body.valor, body.chave, body.idempotency_key))
+    pg = await _guard(_prov(plataforma.conta).pix_enviar(conta_id, body.valor, body.chave, body.idempotency_key))
     return asdict(pg)
 
 
@@ -148,7 +162,7 @@ async def conta_pix(conta_id: str, body: PixIn):
 async def conta_credito(conta_id: str, body: CreditoIn):
     """Simula repasse do app (iFood/Rappi/99) caindo na conta. No real: webhook Pix."""
     _exige_produto("conta")
-    l = await _guard(plataforma.conta().creditar(conta_id, body.valor, body.descricao,
+    l = await _guard(_prov(plataforma.conta).creditar(conta_id, body.valor, body.descricao,
                                                   body.origem, body.idempotency_key))
     return asdict(l)
 
@@ -157,41 +171,41 @@ async def conta_credito(conta_id: str, body: CreditoIn):
 
 @router.post("/kyc")
 async def kyc(p: PessoaIn):
-    return asdict(await _guard(plataforma.kyc().validar(p.to_port())))
+    return asdict(await _guard(_prov(plataforma.kyc).validar(p.to_port())))
 
 
 @router.post("/seguro/cotar")
 async def seguro_cotar(body: CotacaoIn):
     _exige_produto("seguro")
-    return asdict(await _guard(plataforma.seguro().cotar(body.pessoa.to_port(), body.produto, body.params)))
+    return asdict(await _guard(_prov(plataforma.seguro).cotar(body.pessoa.to_port(), body.produto, body.params)))
 
 
 @router.post("/seguro/{cotacao_id}/emitir")
 async def seguro_emitir(cotacao_id: str, cpf: str):
     _exige_produto("seguro")
-    return asdict(await _guard(plataforma.seguro().emitir(cotacao_id, cpf)))
+    return asdict(await _guard(_prov(plataforma.seguro).emitir(cotacao_id, cpf)))
 
 
 @router.post("/mei/abrir")
 async def mei_abrir(body: MeiIn):
     _exige_produto("mei")
-    return asdict(await _guard(plataforma.contador().abrir_mei(body.pessoa.to_port(), body.cnae)))
+    return asdict(await _guard(_prov(plataforma.contador).abrir_mei(body.pessoa.to_port(), body.cnae)))
 
 
 @router.get("/mei/{cnpj}/das/{competencia}")
 async def mei_das(cnpj: str, competencia: str):
     _exige_produto("mei")
-    return asdict(await _guard(plataforma.contador().das(cnpj, competencia)))
+    return asdict(await _guard(_prov(plataforma.contador).das(cnpj, competencia)))
 
 
 @router.post("/renda/consentir")
 async def renda_consentir(body: ConsentIn):
     _exige_produto("ganhos")
-    return asdict(await _guard(plataforma.renda().consentir(body.cpf, body.fonte)))
+    return asdict(await _guard(_prov(plataforma.renda).consentir(body.cpf, body.fonte)))
 
 
 @router.get("/renda/{consentimento_id}")
 async def renda_ler(consentimento_id: str, meses: int = 3):
     _exige_produto("ganhos")
-    rs = await _guard(plataforma.renda().renda(consentimento_id, meses))
+    rs = await _guard(_prov(plataforma.renda).renda(consentimento_id, meses))
     return {"meses": [asdict(r) for r in rs], "media": round(sum(r.bruto for r in rs) / max(len(rs), 1), 2)}

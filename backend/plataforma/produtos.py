@@ -69,16 +69,26 @@ PRODUTOS: list[ProdutoManifest] = [
         tags=("baas",),
     ),
     ProdutoManifest(
-        id="ganhos", titulo="Ganhos dos apps", rota="/app/ganhos", icone="TrendingUp", ordem=20,
-        descricao="Integração com iFood, Rappi, 99 e Uber: renda consolidada e repasse na conta.",
-        requisitos=(Requisito("renda", (C.RENDA_CONSENTIR, C.RENDA_LER)),),
-        tags=("integracao",),
+        id="ganhos", titulo="Meus ganhos", rota="/app/ganhos", icone="TrendingUp", ordem=20,
+        descricao="O que você recebeu em cada app, lançado por você.",
+        # SEM requisito de propósito: a renda declarada pelo entregador é real e
+        # não depende de ninguém. Quando houver Open Finance ou convênio, o
+        # fornecedor entra como fonte adicional, não como condição.
+        requisitos=(),
+        tags=("real",),
+    ),
+    ProdutoManifest(
+        id="credito", titulo="Simulação de crédito", rota="/app/credito", icone="Banknote",
+        ordem=35,
+        descricao="O que cabe no seu bolso, pela renda que você lançou.",
+        requisitos=(),          # a política é nossa; virar oferta é que exige emissor
+        tags=("real",),
     ),
     ProdutoManifest(
         id="margem", titulo="Margem líquida real", rota="/app/margem", icone="Calculator", ordem=30,
         descricao="Custo por km (combustível, óleo, depreciação, DAS) e o líquido de verdade.",
-        requisitos=(),                              # roda local, sem provedor
-        tags=("fidelizacao",),
+        requisitos=(),                              # aritmética sobre dado dele
+        tags=("fidelizacao", "real"),
     ),
     ProdutoManifest(
         id="mei", titulo="MEI e contabilidade", rota="/app/mei", icone="FileText", ordem=40,

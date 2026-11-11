@@ -391,39 +391,72 @@ class MotorJornadas:
             return {"ok": True, "kyc": asdict(res)}
 
         if tipo == "conectar_app":
+            # Com integração contratada, pede consentimento e lê da plataforma.
+            # Sem integração — o caso de hoje —, apenas registra em quais apps a
+            # pessoa roda. Nada é lido escondido, nada é inventado: a renda vem
+            # do que ela lança.
+            from .registry import ProvedorNaoConfigurado
             slugs = resposta.get("apps") or cfg.get("apps") or []
             minimo = int(cfg.get("minimo", 1))
             conectados = ctx.setdefault("apps_conectados", [])
+            ja = {c["app"] for c in conectados}
             for slug in slugs:
+                if slug in ja:
+                    continue
                 try:
                     app = next(a for a in self.catalogo.apps_entrega(False) if a.slug == slug)
                 except StopIteration:
                     continue
-                prov = self.catalogo.provider_app_entrega(app.id)
-                cns = await prov.consentir(ctx.get("cpf", e.cpf), app.slug)
-                conectados.append({"app": app.slug, "nome": app.nome,
-                                   "consentimento_id": cns.consentimento_id})
+                try:
+                    prov = self.catalogo.provider_app_entrega(app.id)
+                    cns = await prov.consentir(ctx.get("cpf", e.cpf), app.slug)
+                    conectados.append({"app": app.slug, "nome": app.nome,
+                                       "consentimento_id": cns.consentimento_id,
+                                       "origem": "integracao"})
+                except ProvedorNaoConfigurado:
+                    conectados.append({"app": app.slug, "nome": app.nome,
+                                       "consentimento_id": None, "origem": "declarado"})
             if len(conectados) < minimo:
-                return {"ok": False, "erro": "conecte_ao_menos_um_app",
+                return {"ok": False, "erro": "selecione_ao_menos_um_app",
                         "minimo": minimo, "conectados": len(conectados)}
             return {"ok": True, "apps": conectados}
 
         if tipo == "renda":
+            # Duas fontes, nesta ordem: integração contratada (quando existe) e
+            # os ganhos que a própria pessoa lançou. Se não houver nenhuma das
+            # duas, a jornada PARA e pede o lançamento — não se estima renda.
             meses = int(cfg.get("meses", 3))
+            cpf = ctx.get("cpf", e.cpf)
             total, detalhe = 0.0, []
             for c in ctx.get("apps_conectados", []):
+                if not c.get("consentimento_id"):
+                    continue
                 app = next((a for a in self.catalogo.apps_entrega() if a.slug == c["app"]), None)
                 if not app:
                     continue
-                prov = self.catalogo.provider_app_entrega(app.id)
-                rs = await prov.renda(c["consentimento_id"], meses)
+                rs = await self.catalogo.provider_app_entrega(app.id).renda(
+                    c["consentimento_id"], meses)
                 media = sum(r.bruto for r in rs) / max(len(rs), 1)
                 total += media
-                detalhe.append({"app": c["app"], "media": round(media, 2),
+                detalhe.append({"app": c["app"], "media": round(media, 2), "fonte": "integracao",
                                 "meses": [asdict(r) for r in rs]})
+
+            from .ganhos import RepositorioGanhos
+            declarada = RepositorioGanhos().renda_para_credito(cpf, meses)
+            if declarada["meses_renda"] > 0:
+                total += declarada["renda_media"]
+                detalhe.append({"app": "lancado_por_voce", "media": declarada["renda_media"],
+                                "fonte": declarada["fonte"],
+                                "meses_lancados": declarada["meses_renda"]})
+
+            if not detalhe:
+                return {"ok": False, "erro": "sem_renda_lancada",
+                        "mensagem": "Lance seus ganhos para seguir: sem renda informada não"
+                                    " dá para calcular o que cabe no seu bolso."}
+
             ctx["renda_media"] = round(total, 2)
             ctx["renda_detalhe"] = detalhe
-            ctx["meses_renda"] = meses
+            ctx["meses_renda"] = max([d.get("meses_lancados", meses) for d in detalhe] or [meses])
             minimo = float(cfg.get("minimo", 0))
             if minimo and ctx["renda_media"] < minimo:
                 return {"ok": False, "recusar": True, "erro": "renda_insuficiente",

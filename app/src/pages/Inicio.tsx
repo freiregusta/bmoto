@@ -14,14 +14,14 @@ import { usePerfil } from "@/platform/PerfilProvider";
 import { rotaModulo } from "@/rotas";
 
 export default function Inicio() {
-  const { disponiveis, modulos, carregando, modoDemo } = usePlataforma();
+  const { disponiveis, aguardandoFornecedor, carregando, semServidor } = usePlataforma();
   const { perfil } = usePerfil();
 
   if (carregando) return <Card><Carregando /></Card>;
 
   const comResumo = disponiveis.filter((m) => obterModulo(m.id)?.Resumo);
   const atalhos = disponiveis.filter((m) => !obterModulo(m.id)?.Resumo && m.id !== "inicio");
-  const emBreve = modulos.filter((m) => !m.enabled && m.fase !== "legado");
+  const emBreve = aguardandoFornecedor.filter((m) => m.fase !== "legado");
 
   return (
     <div className="space-y-6">
@@ -37,7 +37,8 @@ export default function Inicio() {
 
       {atalhos.length > 0 && (
         <section>
-          <SecaoTitulo titulo="Seus produtos" subtitulo="Tudo que a BMoto resolve para você" />
+          <SecaoTitulo titulo="O que já funciona"
+                       subtitulo="Sobre os seus números, não sobre estimativa" />
           <div className="grid grid-cols-2 gap-3">
             {atalhos.map((m) => (
               <Link key={m.id} to={rotaModulo(m.id)}
@@ -53,22 +54,25 @@ export default function Inicio() {
 
       {emBreve.length > 0 && (
         <section>
-          <SecaoTitulo titulo="Em breve" subtitulo="Produtos desligados no painel de administração" />
-          <div className="flex flex-wrap gap-2">
+          <SecaoTitulo titulo="Ainda não está no ar"
+                       subtitulo="Depende de fornecedor contratado. Toque para ver o que falta." />
+          <div className="space-y-2">
             {emBreve.map((m) => (
-              <Chip key={m.id} tom="off">
-                <Icone nome={m.icone} className="h-3.5 w-3.5" />
-                {m.titulo}
-              </Chip>
+              <Link key={m.id} to={rotaModulo(m.id)}
+                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[.03] p-3 transition hover:bg-white/[.06]">
+                <Icone nome={m.icone} className="h-4 w-4 text-ink-faint" />
+                <span className="flex-1 text-sm text-ink-muted">{m.titulo}</span>
+                <Chip tom="off">em construção</Chip>
+              </Link>
             ))}
           </div>
         </section>
       )}
 
-      {modoDemo && (
+      {semServidor && (
         <p className="text-xs leading-relaxed text-ink-faint">
-          Modo demonstração: o app está rodando com dados locais porque não encontrou o backend.
-          Suba o FastAPI (<code>uvicorn api:app</code>) e recarregue para ver os dados reais.
+          Sem conexão com o servidor. O que você lançou continua aqui no aparelho e sobe quando
+          a conexão voltar; o que depende de fornecedor aparece como em construção.
         </p>
       )}
     </div>

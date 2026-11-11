@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Aviso, Campo, Chip, Icone } from "./ui";
 import { brl, mascaraTelefone, paraNumero, pct } from "@/lib/format";
 import type { CampoFormulario, EstadoJornada, Oferta, Passo } from "@/platform/types";
-import { APPS_DEMO } from "@/platform/demo";
+import { APPS_CONHECIDOS } from "@/platform/catalogo-local";
 
 interface Props {
   passo: Passo;
@@ -201,8 +201,7 @@ function PassoConsentimento({ passo, enviando, falha, onResponder }: Omit<Props,
 
 function PassoConectarApp({ passo, enviando, falha, onResponder, appsDisponiveis }: Omit<Props, "estado">) {
   const permitidos = passo.config.apps ?? [];
-  const catalogo = (appsDisponiveis?.length ? appsDisponiveis
-                    : APPS_DEMO.map((a) => ({ slug: a.slug, nome: a.nome })))
+  const catalogo = (appsDisponiveis?.length ? appsDisponiveis : APPS_CONHECIDOS)
     .filter((a) => permitidos.length === 0 || permitidos.includes(a.slug));
   const [sel, setSel] = useState<string[]>([]);
   const minimo = passo.config.minimo ?? 1;

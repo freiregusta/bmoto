@@ -9,5 +9,8 @@ _TMP = pathlib.Path(tempfile.mkdtemp(prefix="bmoto_test_"))
 os.environ["PERSIST_DB"] = str(_TMP / "plataforma_test.db")
 os.environ.pop("DATABASE_URL", None)
 os.environ.setdefault("AMBIENTE", "dev")
+# Os simuladores existem para os testes exercitarem a esteira inteira. Em
+# produção esta variável não é definida, e um port sem fornecedor responde 503.
+os.environ.setdefault("PROVEDORES_MOCK", "1")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))

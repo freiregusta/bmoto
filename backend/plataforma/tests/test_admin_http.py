@@ -52,8 +52,10 @@ def test_tipos_alimentam_o_formulario_da_tela(client):
     assert "oferta" in d["tipos_passo"]
 
 
-def test_seed_cria_catalogo_inicial(client):
-    assert len(client.get("/admin/conexoes").json()["conexoes"]) >= 8
+def test_seed_nao_cadastra_fornecedor_nenhum(client):
+    """O seed traz catálogo (produtos, apps, jornadas), nunca fornecedor: quem
+    cadastra conexão é quem tem contrato assinado."""
+    assert client.get("/admin/conexoes").json()["conexoes"] == []
     assert len(client.get("/admin/produtos-credito").json()["produtos"]) >= 5
     assert len(client.get("/admin/apps-entrega").json()["apps"]) >= 5
     assert len(client.get("/admin/jornadas").json()["jornadas"]) >= 7
@@ -118,10 +120,12 @@ def test_produto_de_credito_novo_e_simulacao(client):
 
 def test_app_de_entrega_novo(client):
     r = client.post("/admin/apps-entrega", json={
-        "nome": "Entrega Regional", "tipo_integracao": "api", "provider_tipo": "mock",
+        "nome": "Entrega Regional", "tipo_integracao": "declarado", "provider_tipo": "nenhum",
         "periodicidade_repasse": "diario", "repasse_direto": True, "ordem": 60})
     assert r.status_code == 200 and r.json()["slug"] == "entrega_regional"
-    assert client.post("/admin/apps-entrega/entrega_regional/testar").json()["health"]["ok"]
+    # sem integração contratada, testar a conexão diz isso em vez de dar "ok"
+    r = client.post("/admin/apps-entrega/entrega_regional/testar")
+    assert r.status_code == 503 and "integração" in str(r.json()["detail"])
     client.delete("/admin/apps-entrega/entrega_regional")
 
 
@@ -167,13 +171,29 @@ def test_montar_jornada_pela_api_e_rodar_no_app(client):
     client.delete("/admin/jornadas/jornada_teste")
 
 
-def test_jornada_de_moto_do_seed_roda_ponta_a_ponta(client):
+def test_jornada_de_moto_roda_sobre_renda_lancada(client):
+    """A jornada não estima renda: usa o que o entregador lançou. Sem
+    lançamento ela para e pede — é o que este teste prova nas duas pontas."""
+    cpf = "12345678909"
+    sem_renda = client.post("/jornadas/jornada_moto/iniciar",
+                            json={"cpf": cpf, "contexto": {}}).json()
+    eid0 = sem_renda["execucao_id"]
+    client.post(f"/jornadas/execucao/{eid0}/avancar", json={"resposta": {"apps": ["ifood"]}})
+    parado = client.post(f"/jornadas/execucao/{eid0}/avancar", json={"resposta": {}}).json()
+    assert parado["passo_atual"]["id"] == "renda"
+    assert parado["historico"][-1]["resultado"]["erro"] == "sem_renda_lancada"
+
+    for comp, bruto, km in [("2026-09", 3200, 1850), ("2026-10", 3400, 1960),
+                            ("2026-11", 3300, 1900)]:
+        client.post("/me/ganhos", json={"cpf": cpf, "app": "ifood", "competencia": comp,
+                                        "bruto": bruto, "km": km, "corridas": 180, "horas": 120})
+
     st = client.post("/jornadas/jornada_moto/iniciar", json={
         "cpf": "12345678909",
         "contexto": {"nome": "João Entregador", "nascimento": "1995-03-10", "score": 640}}).json()
     eid = st["execucao_id"]
     # o app responde conforme o passo que recebeu — é assim que ele dirige a jornada
-    por_passo = {"apps": {"apps": ["ifood", "99"]}, "moto": {"valor_garantia": 22_000},
+    por_passo = {"apps": {"apps": ["ifood"]}, "moto": {"valor_garantia": 22_000},
                  "prazo": {"prazo": 48}, "ccb": {"aceito": True}}
     for _ in range(12):
         if st["status"] != "EM_ANDAMENTO" or not st["passo_atual"]:
@@ -182,6 +202,9 @@ def test_jornada_de_moto_do_seed_roda_ponta_a_ponta(client):
         st = client.post(f"/jornadas/execucao/{eid}/avancar", json={"resposta": resposta}).json()
     assert st["status"] == "CONCLUIDA", st["historico"][-1]
     ctx = st["contexto"]
+    # a renda considerada é a média do que foi lançado, não um número estimado
+    assert ctx["renda_media"] == pytest.approx(3300, abs=100)
+    assert any(d["app"] == "lancado_por_voce" for d in ctx["renda_detalhe"])
     assert ctx["oferta"]["aprovado"] and ctx["contrato"]["parcela"] > 0
     assert ctx["apolice"]["produto"] == "moto"           # seguro da moto no fim da jornada
 

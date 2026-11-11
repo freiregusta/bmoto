@@ -9,7 +9,7 @@ import {
   temTelaDedicada,
 } from "./registry";
 import { registrarTodosOsModulos } from "@/modules";
-import { MODULOS_DEMO } from "./demo";
+import { CATALOGO_LOCAL } from "./catalogo-local";
 
 const Falsa = () => null;
 
@@ -49,17 +49,24 @@ describe("telas do produto", () => {
     registrarTodosOsModulos();
   });
 
-  it("tem tela dedicada para conta, ganhos, margem e MEI", () => {
-    expect(idsRegistrados()).toEqual(["conta", "ganhos", "margem", "mei"]);
+  it("só tem tela dedicada o que é real hoje", () => {
+    expect(idsRegistrados()).toEqual(["credito", "ganhos", "margem"]);
   });
 
-  it("todo id registrado existe como módulo da plataforma", () => {
-    const idsDaPlataforma = new Set(MODULOS_DEMO.map((m) => m.id));
-    idsRegistrados().forEach((id) => expect(idsDaPlataforma.has(id)).toBe(true));
+  it("todo id registrado existe no catálogo", () => {
+    const doCatalogo = new Set(CATALOGO_LOCAL.map((m: { id: string }) => m.id));
+    idsRegistrados().forEach((id) => expect(doCatalogo.has(id)).toBe(true));
   });
 
-  it("os módulos de crédito e seguro rodam pela jornada, de propósito", () => {
-    ["moto", "cartao", "seguro", "saude"].forEach((id) =>
+  it("o que depende de fornecedor não tem tela própria", () => {
+    ["conta", "mei", "moto", "cartao", "seguro", "saude"].forEach((id) =>
       expect(temTelaDedicada(id)).toBe(false));
+  });
+
+  it("e aparece no catálogo como não pronto, nunca como disponível", () => {
+    const dependentes = CATALOGO_LOCAL.filter(
+      (m: { requisitos: unknown[] }) => m.requisitos.length > 0);
+    expect(dependentes.length).toBeGreaterThan(0);
+    dependentes.forEach((m: { pronto: boolean }) => expect(m.pronto).toBe(false));
   });
 });

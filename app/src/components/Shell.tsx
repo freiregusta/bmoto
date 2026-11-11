@@ -11,10 +11,10 @@ import { usePlataforma } from "@/platform/PlatformProvider";
 import { rotaAdmin, rotaInicio, rotaMais, rotaModulo, rotaPerfil } from "@/rotas";
 
 /** Itens fixos da barra inferior; o resto entra pelo "Mais". */
-const FIXOS = ["inicio", "conta", "ganhos", "margem"];
+const FIXOS = ["inicio", "ganhos", "margem", "credito"];
 
 export function Shell() {
-  const { disponiveis, modoDemo } = usePlataforma();
+  const { disponiveis, semServidor } = usePlataforma();
   const { pathname } = useLocation();
 
   const naBarra = [
@@ -31,9 +31,10 @@ export function Shell() {
           <Logo />
         </Link>
         <div className="flex items-center gap-2">
-          {modoDemo && (
-            <span className="chip chip-warn" title="Backend não encontrado: dados de demonstração">
-              demo
+          {semServidor && (
+            <span className="chip chip-warn"
+                  title="Sem conexão com o servidor: seus lançamentos ficam salvos no aparelho">
+              offline
             </span>
           )}
           <Link to={rotaPerfil()} className="btn-ghost btn-sm" aria-label="Seu perfil">
@@ -83,9 +84,10 @@ export function Shell() {
 
 function curto(titulo: string): string {
   const mapa: Record<string, string> = {
-    "Conta BMoto": "Conta",
-    "Ganhos dos apps": "Ganhos",
+    "Meus ganhos": "Ganhos",
     "Margem líquida real": "Margem",
+    "Simulação de crédito": "Crédito",
+    "Conta BMoto": "Conta",
     "MEI e contabilidade": "MEI",
   };
   return mapa[titulo] ?? titulo.split(" ")[0];

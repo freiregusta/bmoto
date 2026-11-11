@@ -3,10 +3,10 @@
  *
  * Duas decisões que importam:
  *
- * 1. **Modo demo**: sem backend no ar, o app não quebra. `api` tenta a rede e,
- *    se não houver resposta, cai para `demo.ts` (manifestos e jornadas
- *    equivalentes aos do seed). Assim dá para apresentar o app em qualquer
- *    lugar, e o mesmo código roda contra o FastAPI de verdade.
+ * 1. **Sem servidor, sem invenção**: se o backend não responde, o app usa o
+ *    catálogo local (nomes de produto) e os dados que o próprio entregador
+ *    lançou no aparelho. Nunca um saldo, uma renda ou uma oferta inventada —
+ *    o que depende de fornecedor aparece como indisponível.
  * 2. **Token de admin** fica em memória + sessionStorage, nunca em código.
  */
 
@@ -44,7 +44,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Erro de rede/backend ausente — dispara o modo demo. */
+/** Erro de rede/backend ausente — dispara o caminho local. */
 export class SemBackend extends Error {
   constructor() {
     super("backend indisponível");
@@ -70,7 +70,7 @@ async function bruto<T>(metodo: Metodo, caminho: string, corpo?: unknown): Promi
     });
     // Resposta que não é JSON quase sempre quer dizer "não tem backend aqui":
     // um SPA servindo index.html para qualquer rota, ou um proxy no meio.
-    // Tratar como backend ausente leva ao modo demo em vez de uma tela quebrada.
+    // Tratar como backend ausente leva ao caminho local, não a uma tela quebrada.
     const tipo = res.headers.get("content-type") ?? "";
     if (res.ok && !tipo.includes("json")) throw new SemBackend();
 
@@ -108,10 +108,11 @@ export const api = {
 };
 
 /**
- * Executa a chamada real e, se o backend não responder, usa o fallback de demo.
- * Erros de negócio (4xx/5xx) NÃO caem no fallback — eles são a resposta.
+ * Executa a chamada real e, se o backend não responder, usa o caminho local.
+ * Erros de negócio (4xx/5xx) NÃO caem no fallback — eles são a resposta, e é
+ * assim que o 503 "fornecedor não configurado" chega até a tela.
  */
-export async function comDemo<T>(chamada: () => Promise<T>, fallback: () => T | Promise<T>): Promise<T> {
+export async function comFallback<T>(chamada: () => Promise<T>, fallback: () => T | Promise<T>): Promise<T> {
   try {
     return await chamada();
   } catch (e) {

@@ -9,6 +9,17 @@ from plataforma.jornadas import MotorJornadas, RepositorioJornadas, _condicao_ok
 from plataforma.registry import Plataforma
 
 
+def _lancar(cpf: str, prefixo: str, meses=(("2026-09", 2400.0), ("2026-10", 2500.0),
+                                           ("2026-11", 2600.0))):
+    """Ganhos reais lançados pelo entregador — a única fonte de renda hoje."""
+    from plataforma.ganhos import RepositorioGanhos
+    repo = RepositorioGanhos()
+    for competencia, bruto in meses:
+        repo.lancar({"cpf": cpf, "app": "ifood", "competencia": competencia,
+                     "bruto": bruto, "km": 1800, "corridas": 170, "horas": 120})
+    return repo
+
+
 @pytest.fixture
 def ambiente():
     pref = f"j{uuid.uuid4().hex[:8]}"
@@ -101,6 +112,7 @@ async def test_jornada_de_conta_ponta_a_ponta(ambiente):
 @pytest.mark.asyncio
 async def test_jornada_de_moto_com_renda_oferta_e_ccb(ambiente):
     _, repo, motor = ambiente
+    _lancar("12345678909", "")
     repo.salvar({"id": "jm", "nome": "Moto", "modulo_id": "moto",
                  "produto_credito_id": "moto_nova", "passos": [
         {"id": "apps", "tipo": "conectar_app", "titulo": "Apps",
@@ -120,8 +132,11 @@ async def test_jornada_de_moto_com_renda_oferta_e_ccb(ambiente):
                                             "score": 620})
     st = await motor.avancar(e.id, {"apps": ["ifood", "99"]})
     assert len(st["contexto"]["apps_conectados"]) == 2
-    st = await motor.avancar(e.id)                            # renda: 2480 + 910
-    assert st["contexto"]["renda_media"] == pytest.approx(3_267, abs=60)
+    # sem integração contratada, os apps são apenas declarados — e a renda vem
+    # do que foi lançado, não de uma leitura inventada
+    assert all(a["origem"] == "declarado" for a in st["contexto"]["apps_conectados"])
+    st = await motor.avancar(e.id)
+    assert st["contexto"]["renda_media"] == pytest.approx(2_500, abs=60)
     st = await motor.avancar(e.id, {"valor_garantia": 20_000})
     st = await motor.avancar(e.id, {"prazo": 48})
     assert st["contexto"]["prazo"] == 48
@@ -139,16 +154,34 @@ async def test_jornada_de_moto_com_renda_oferta_e_ccb(ambiente):
 @pytest.mark.asyncio
 async def test_renda_insuficiente_recusa_a_jornada(ambiente):
     cat, repo, motor = ambiente
-    cat.salvar_app_entrega({"id": "pequeno", "nome": "App pequeno", "slug": "uber"})  # renda 0
+    cpf = "11144477735"
+    _lancar(cpf, "", (("2026-10", 900.0), ("2026-11", 950.0)))
+    cat.salvar_app_entrega({"id": "pequeno", "nome": "App pequeno", "slug": "uber"})
     repo.salvar({"id": "jr", "nome": "Recusa", "passos": [
         {"id": "apps", "tipo": "conectar_app", "titulo": "Apps", "config": {"apps": ["uber"]}},
         {"id": "renda", "tipo": "renda", "titulo": "Renda", "config": {"minimo": 1800}},
     ]})
-    e = motor.iniciar("jr", "12345678909")
+    e = motor.iniciar("jr", cpf)
     await motor.avancar(e.id, {"apps": ["uber"]})
     st = await motor.avancar(e.id)
     assert st["status"] == "RECUSADA"
     assert st["historico"][-1]["resultado"]["erro"] == "renda_insuficiente"
+
+
+@pytest.mark.asyncio
+async def test_jornada_para_quando_nao_ha_renda_lancada(ambiente):
+    """Nada de estimar: sem lançamento, a jornada pede o lançamento."""
+    cat, repo, motor = ambiente
+    cat.salvar_app_entrega({"id": "x", "nome": "App", "slug": "uber"})
+    repo.salvar({"id": "jz", "nome": "Sem renda", "passos": [
+        {"id": "apps", "tipo": "conectar_app", "titulo": "Apps", "config": {"apps": ["uber"]}},
+        {"id": "renda", "tipo": "renda", "titulo": "Renda", "config": {}},
+    ]})
+    e = motor.iniciar("jz", "52998224725")
+    await motor.avancar(e.id, {"apps": ["uber"]})
+    st = await motor.avancar(e.id)
+    assert st["status"] == "EM_ANDAMENTO" and st["passo_atual"]["id"] == "renda"
+    assert st["historico"][-1]["resultado"]["erro"] == "sem_renda_lancada"
 
 
 @pytest.mark.asyncio

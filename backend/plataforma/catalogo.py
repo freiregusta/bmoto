@@ -43,7 +43,9 @@ TIPOS_PRODUTO_CREDITO = (
     "financiamento_moto", "cartao_garantido", "cartao_credito", "credito_pessoal",
     "antecipacao_recebiveis", "consignado_clt", "consignado_app", "financiamento_celular",
 )
-TIPOS_INTEGRACAO_APP = ("api", "open_finance", "webhook", "arquivo", "manual")
+# Como a renda daquele app chega até nós. "declarado" é o único que funciona
+# hoje sem contrato: o próprio entregador lança o que recebeu.
+TIPOS_INTEGRACAO_APP = ("declarado", "extrato", "open_finance", "api", "webhook")
 
 
 def _agora() -> str:
@@ -204,8 +206,8 @@ class AppEntrega:
     id: str
     nome: str
     slug: str
-    tipo_integracao: str = "api"            # ver TIPOS_INTEGRACAO_APP
-    provider_tipo: str = "mock"             # mock | rest
+    tipo_integracao: str = "declarado"      # ver TIPOS_INTEGRACAO_APP
+    provider_tipo: str = "nenhum"           # nenhum (renda declarada) | rest
     config: dict = field(default_factory=dict)      # spec REST quando provider_tipo=rest
     # repasse
     repasse_direto: bool = False            # paga na chave Pix da conta BMoto?
@@ -460,8 +462,8 @@ class Catalogo:
     def salvar_app_entrega(self, dados: dict, quem: str = "admin") -> AppEntrega:
         if dados.get("tipo_integracao", "api") not in TIPOS_INTEGRACAO_APP:
             raise ValueError(f"tipo_integracao inválido. Válidos: {list(TIPOS_INTEGRACAO_APP)}")
-        if dados.get("provider_tipo", "mock") not in ("mock", "rest"):
-            raise ValueError("provider_tipo deve ser 'mock' ou 'rest'")
+        if dados.get("provider_tipo", "nenhum") not in ("nenhum", "rest"):
+            raise ValueError("provider_tipo deve ser 'nenhum' (renda declarada) ou 'rest'")
         slug = _slug(dados.get("slug") or dados.get("nome") or "")
         aid = dados.get("id") or slug
         antes = self._s_app.get(aid)
@@ -490,8 +492,16 @@ class Catalogo:
         return ok
 
     def provider_app_entrega(self, app_id: str):
-        """RendaProvider do app: cada plataforma pode ter integração própria."""
+        """RendaProvider do app, quando existe integração contratada.
+
+        Sem integração (o caso de hoje), não há provider: a renda vem do que o
+        entregador lança, em `ganhos.py`. Melhor não ter resposta do que ter
+        uma inventada."""
         a = self.app_entrega(app_id)
+        if a.provider_tipo == "nenhum":
+            from .registry import ProvedorNaoConfigurado
+            raise ProvedorNaoConfigurado(
+                "renda", f"integração com {a.nome} (hoje a renda é lançada pelo entregador)")
         chave = f"app:{a.id}:{a.atualizado_em}"
         if chave not in self._cache_provider:
             self._cache_provider[chave] = construir_adapter(a.provider_tipo, "renda",

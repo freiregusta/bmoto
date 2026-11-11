@@ -36,7 +36,7 @@ from .adapters.rest import OPERACOES_POR_PORT
 from .catalogo import TIPOS_INTEGRACAO_APP, TIPOS_PRODUTO_CREDITO, catalogo
 from .jornadas import TIPOS_PASSO, MotorJornadas, RepositorioJornadas
 from .ports import PORTS
-from .registry import ENV_POR_PORT, plataforma
+from .registry import ENV_POR_PORT, ProvedorNaoConfigurado, plataforma
 
 repo_jornadas = RepositorioJornadas()
 motor = MotorJornadas(repo_jornadas, catalogo, plataforma)
@@ -160,6 +160,10 @@ class JornadaIn(BaseModel):
 def _erro(fn, *a, **kw):
     try:
         return fn(*a, **kw)
+    except ProvedorNaoConfigurado as e:
+        # Sem fornecedor não há teste a fazer: dizemos qual é a dependência.
+        raise HTTPException(503, {"erro": "fornecedor_nao_configurado", "port": e.port,
+                                  "dependencia": e.dependencia, "mensagem": str(e)})
     except KeyError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:

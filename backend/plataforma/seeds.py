@@ -14,16 +14,9 @@ from __future__ import annotations
 
 import sys
 
-CONEXOES = [
-    {"id": "conta_mock", "port": "conta", "tipo": "mock", "titulo": "Conta (mock)", "prioridade": 500},
-    {"id": "cartao_mock", "port": "cartao", "tipo": "mock", "titulo": "Cartão (mock)", "prioridade": 500},
-    {"id": "kyc_mock", "port": "kyc", "tipo": "mock", "titulo": "KYC (mock)", "prioridade": 500},
-    {"id": "credito_mock", "port": "credito", "tipo": "mock", "titulo": "Emissor (mock)", "prioridade": 500},
-    {"id": "seguro_mock", "port": "seguro", "tipo": "mock", "titulo": "Seguradora (mock)", "prioridade": 500},
-    {"id": "saude_mock", "port": "saude", "tipo": "mock", "titulo": "Operadora de saúde (mock)", "prioridade": 500},
-    {"id": "contador_mock", "port": "contador", "tipo": "mock", "titulo": "Contabilidade (mock)", "prioridade": 500},
-    {"id": "renda_mock", "port": "renda", "tipo": "mock", "titulo": "Renda (mock)", "prioridade": 500},
-]
+# Nenhuma conexão é semeada. Fornecedor se cadastra quando existe contrato;
+# até lá o port responde 503 com a dependência, e o app diz isso à pessoa.
+CONEXOES: list[dict] = []
 
 PRODUTOS_CREDITO = [
     {"id": "moto_nova", "nome": "Financiamento de moto nova", "tipo": "financiamento_moto",
@@ -54,17 +47,23 @@ PRODUTOS_CREDITO = [
      "ativo": False},
 ]
 
+# Catálogo de plataformas: serve para o entregador dizer DE ONDE veio cada
+# ganho. "declarado" é o que funciona hoje — ninguém tem API aberta de ganhos
+# para terceiro. Quando houver integração, troca-se o tipo aqui.
 APPS_ENTREGA = [
-    {"id": "ifood", "nome": "iFood", "slug": "ifood", "tipo_integracao": "api",
-     "provider_tipo": "mock", "periodicidade_repasse": "semanal", "ordem": 10},
-    {"id": "rappi", "nome": "Rappi", "slug": "rappi", "tipo_integracao": "api",
-     "provider_tipo": "mock", "periodicidade_repasse": "semanal", "ordem": 20},
-    {"id": "99", "nome": "99Food", "slug": "99", "tipo_integracao": "api",
-     "provider_tipo": "mock", "periodicidade_repasse": "semanal", "ordem": 30},
-    {"id": "uber", "nome": "Uber Eats", "slug": "uber", "tipo_integracao": "open_finance",
-     "provider_tipo": "mock", "periodicidade_repasse": "semanal", "ordem": 40},
-    {"id": "loggi", "nome": "Loggi", "slug": "loggi", "tipo_integracao": "manual",
-     "provider_tipo": "mock", "periodicidade_repasse": "quinzenal", "ordem": 50},
+    {"id": "ifood", "nome": "iFood", "slug": "ifood", "tipo_integracao": "declarado",
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 10},
+    {"id": "rappi", "nome": "Rappi", "slug": "rappi", "tipo_integracao": "declarado",
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 20},
+    {"id": "99", "nome": "99Food", "slug": "99", "tipo_integracao": "declarado",
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 30},
+    {"id": "uber", "nome": "Uber Eats", "slug": "uber", "tipo_integracao": "declarado",
+     "provider_tipo": "nenhum", "periodicidade_repasse": "semanal", "ordem": 40},
+    {"id": "loggi", "nome": "Loggi", "slug": "loggi", "tipo_integracao": "declarado",
+     "provider_tipo": "nenhum", "periodicidade_repasse": "quinzenal", "ordem": 50},
+    {"id": "outros", "nome": "Outro app ou particular", "slug": "outros",
+     "tipo_integracao": "declarado", "provider_tipo": "nenhum",
+     "periodicidade_repasse": "semanal", "ordem": 90},
 ]
 
 _CONSENT_LGPD = ("Autorizo a BMoto a consultar meus dados para abrir a conta e avaliar "

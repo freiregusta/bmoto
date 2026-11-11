@@ -23,7 +23,7 @@ const ITENS = [
 ];
 
 export function AdminShell() {
-  const { modoDemo } = usePlataforma();
+  const { semServidor } = usePlataforma();
   const [token, setToken] = useState(obterTokenAdmin() ?? "");
   const [abrirToken, setAbrirToken] = useState(false);
 
@@ -74,10 +74,10 @@ export function AdminShell() {
       </aside>
 
       <main className="flex-1 px-4 py-6 lg:px-8">
-        {modoDemo && (
+        {semServidor && (
           <div className="mb-5 rounded-xl border border-warn/35 bg-warn/10 p-3 text-sm">
-            <strong className="font-semibold">Modo demonstração.</strong> O painel está exibindo o
-            catálogo local porque não encontrou o backend. As alterações não serão salvas.
+            <strong className="font-semibold">Sem conexão com o servidor.</strong> O painel não
+            tem o que mostrar e nada do que você alterar aqui será salvo.
           </div>
         )}
         <Outlet />
