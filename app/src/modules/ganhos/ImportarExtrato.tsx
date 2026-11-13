@@ -13,7 +13,7 @@
 
 import { useRef, useState } from "react";
 import { Aviso, Card, Chip, Icone, SecaoTitulo } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, SemBackend } from "@/lib/api";
 import { brl, data as formatarData, pct } from "@/lib/format";
 import { usePerfil } from "@/platform/PerfilProvider";
 import { rotuloCompetencia } from "@/platform/meusDados";
@@ -33,6 +33,20 @@ interface Conferencia {
 
 const LIMITE_BYTES = 2_000_000;
 
+/**
+ * Ler o extrato acontece no servidor. Sem ele, o erro é esse — e dizer
+ * "não consegui ler o arquivo" culparia o arquivo do entregador por um
+ * problema que é nosso.
+ */
+function mensagemDeErro(e: unknown, padrao: string): string {
+  if (e instanceof SemBackend)
+    return "O servidor não respondeu. A leitura do extrato acontece lá, então tente de novo "
+         + "daqui a pouco — enquanto isso dá para lançar o mês na mão, aqui embaixo.";
+  const detalhe = (e as any)?.corpo?.detail;
+  if (typeof detalhe === "string") return detalhe;
+  return detalhe?.mensagem ?? padrao;
+}
+
 export function ImportarExtrato({ onImportado }: { onImportado: () => void | Promise<void> }) {
   const { perfil } = usePerfil();
   const [conteudo, setConteudo] = useState("");
@@ -50,8 +64,7 @@ export function ImportarExtrato({ onImportado }: { onImportado: () => void | Pro
       setConferencia(await api.post<Conferencia>("/me/extrato/conferir",
                                                  { cpf: perfil.cpf, conteudo: texto }));
     } catch (e: any) {
-      const d = e?.corpo?.detail;
-      setErro(typeof d === "string" ? d : d?.mensagem ?? "não consegui ler este arquivo");
+      setErro(mensagemDeErro(e, "não consegui ler este arquivo"));
     } finally {
       setEstado("idle");
     }
@@ -67,8 +80,7 @@ export function ImportarExtrato({ onImportado }: { onImportado: () => void | Pro
       setEstado("ok");
       await onImportado();
     } catch (e: any) {
-      const d = e?.corpo?.detail;
-      setErro(typeof d === "string" ? d : d?.mensagem ?? "não deu para importar");
+      setErro(mensagemDeErro(e, "não deu para importar"));
       setEstado("idle");
     }
   };
