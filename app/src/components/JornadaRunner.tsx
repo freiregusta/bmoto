@@ -39,7 +39,7 @@ export function JornadaRunner({ modulo, onConcluir }: {
     if (j.jornada && !j.estado && !j.enviando) {
       void j.iniciar({ nome: perfil.nome, nascimento: perfil.nascimento,
                        celular: perfil.celular, email: perfil.email,
-                       cnpj_mei: perfil.cnpjMei, score: perfil.score });
+                       cnpj_mei: perfil.cnpjMei });
     }
   }, [j.jornada, j.estado, j.enviando]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -8,9 +8,8 @@
 
 import { useState } from "react";
 import { Aviso, Card, Icone, SecaoTitulo } from "./ui";
-import { api } from "@/lib/api";
-import { usePerfil } from "@/platform/PerfilProvider";
 import { DEPENDENCIA } from "@/platform/catalogo-local";
+import { registrarInteresse } from "@/platform/meusDados";
 import type { Modulo, PortId } from "@/platform/types";
 import { rotaModulo } from "@/rotas";
 
@@ -34,7 +33,6 @@ const ENQUANTO_ISSO: Record<string, { texto: string; modulo?: string; rotulo?: s
 };
 
 export function Indisponivel({ modulo }: { modulo: Modulo }) {
-  const { perfil } = usePerfil();
   const [estado, setEstado] = useState<"idle" | "enviando" | "ok" | "erro">("idle");
   const enquanto = ENQUANTO_ISSO[modulo.id];
 
@@ -94,10 +92,8 @@ export function Indisponivel({ modulo }: { modulo: Modulo }) {
                     onClick={async () => {
                       setEstado("enviando");
                       try {
-                        await api.post("/me/interesse", {
-                          cpf: perfil.cpf, produto: modulo.id, celular: perfil.celular,
-                        });
-                        setEstado("ok");
+                        const r = await registrarInteresse(modulo.id);
+                        setEstado(r.ok ? "ok" : "erro");
                       } catch {
                         setEstado("erro");
                       }

@@ -3,16 +3,39 @@
 import { useState } from "react";
 import { Aviso, Campo, Card, Chip, Icone, SecaoTitulo } from "@/components/ui";
 import { brl, cpfValido, mascaraCpf, mascaraTelefone } from "@/lib/format";
+import { ErroServidor, funcao } from "@/lib/supabase";
 import { usePerfil } from "@/platform/PerfilProvider";
 
 export default function Perfil() {
-  const { perfil, carteira, atualizar, sair, limpar } = usePerfil();
+  const { perfil, carteira, atualizar, sair } = usePerfil();
   const [form, setForm] = useState(perfil);
   const [salvo, setSalvo] = useState(false);
+  const [apagando, setApagando] = useState(false);
+  const [erroApagar, setErroApagar] = useState("");
   const cpfRuim = form.cpf.replace(/\D/g, "").length === 11 && !cpfValido(form.cpf);
 
+  const apagarTudo = async () => {
+    // Duas confirmações porque é irreversível e leva o login junto.
+    if (!window.confirm(
+      "Apagar sua conta e TODOS os seus dados (ganhos, custos, cadastro e login), "
+      + "aqui e no servidor? Não tem como desfazer.")) return;
+    setApagando(true);
+    setErroApagar("");
+    try {
+      await funcao("apagar-conta", { confirmacao: "APAGAR" });
+      await sair();
+    } catch (e: any) {
+      setErroApagar(e instanceof ErroServidor
+        ? e.message
+        : "Não deu para apagar agora. Sem servidor, nada é apagado de verdade — "
+          + "tente de novo em instantes.");
+    } finally {
+      setApagando(false);
+    }
+  };
+
   const salvar = () => {
-    atualizar({ ...form, cpf: form.cpf.replace(/\D/g, ""), cadastrado: true });
+    void atualizar({ nome: form.nome, celular: form.celular, nascimento: form.nascimento });
     setSalvo(true);
     window.setTimeout(() => setSalvo(false), 2200);
   };
@@ -46,7 +69,7 @@ export default function Perfil() {
           <input className="input" type="email" value={form.email}
                  onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </Campo>
-        {salvo && <Aviso tom="ok">Dados salvos neste aparelho.</Aviso>}
+        {salvo && <Aviso tom="ok">Dados salvos.</Aviso>}
         <button className="btn-primary w-full" onClick={salvar} disabled={cpfRuim || !form.nome}>
           Salvar
         </button>
@@ -97,14 +120,16 @@ export default function Perfil() {
           <Icone nome="Power" className="h-4 w-4" />
           Sair desta conta
         </button>
-        <button className="btn-ghost mt-2 w-full text-danger"
-                onClick={() => {
-                  if (window.confirm("Apagar cadastro, conta, MEI e tudo o mais guardado neste aparelho?"))
-                    limpar();
-                }}>
+        <button className="btn-ghost mt-2 w-full text-danger" disabled={apagando}
+                onClick={() => void apagarTudo()}>
           <Icone nome="Trash2" className="h-4 w-4" />
-          Apagar meus dados deste aparelho
+          {apagando ? "Apagando…" : "Apagar minha conta e meus dados"}
         </button>
+        {erroApagar && <Aviso tom="erro" className="mt-2">{erroApagar}</Aviso>}
+        <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+          Apaga de verdade: ganhos, custos, cadastro e o login, aqui e no servidor. Não tem
+          como desfazer.
+        </p>
       </Card>
     </div>
   );

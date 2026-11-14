@@ -1,53 +1,91 @@
 /**
  * Entrada — a primeira tela de quem acabou de instalar o app.
  *
- * Nada de produto antes de existir uma pessoa: quem chega cria a conta (ou
- * entra, se já criou neste aparelho) e só então vê início, saldo e ofertas.
+ * Nada de produto antes de existir uma pessoa. A jornada é:
  *
- * O cadastro aqui é da PESSOA no app. Abrir a conta bancária é outra coisa,
- * com KYC e provisionamento no BaaS — e isso é a jornada do módulo Conta.
+ *   boas-vindas → e-mail → código de 6 dígitos → seus dados → início
+ *
+ * Por que e-mail e não senha: senha é a primeira coisa que se esquece num app
+ * que a pessoa abre uma vez por semana. Por que não SMS: SMS no Brasil exige
+ * provedor contratado — quando entrar, só o PerfilProvider muda, esta tela
+ * continua igual.
+ *
+ * O cadastro aqui é da PESSOA no app. Abrir conta bancária é outra coisa, com
+ * KYC e provisionamento em BaaS, e é a jornada do módulo Conta.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Aviso, Campo, Card, Icone, Logo } from "@/components/ui";
+import { Aviso, Campo, Card, Carregando, Icone, Logo } from "@/components/ui";
 import { cpfValido, mascaraCpf, mascaraTelefone } from "@/lib/format";
+import { configurado } from "@/lib/supabase";
 import { usePerfil } from "@/platform/PerfilProvider";
 import { rotaInicio } from "@/rotas";
 
-type Passo = "boas-vindas" | "cadastro" | "entrar";
+type Passo = "boas-vindas" | "email" | "codigo" | "dados";
 
 const PROMESSAS: Array<[string, string, string]> = [
-  ["Wallet", "Conta sem tarifa", "O repasse dos apps cai em um lugar só"],
-  ["TrendingUp", "Crédito pela sua renda real", "Sem holerite, sem fiador: a corrida é a prova"],
   ["Calculator", "Quanto você ganha de verdade", "Desconta combustível, manutenção e DAS"],
+  ["TrendingUp", "Crédito pela sua renda real", "Sem holerite, sem fiador: a corrida é a prova"],
+  ["FileText", "Sua renda comprovada", "O extrato do repasse vira prova de renda"],
 ];
 
 export default function Entrada() {
+  const { autenticado, precisaCompletarCadastro, carregando } = usePerfil();
   const [passo, setPasso] = useState<Passo>("boas-vindas");
+  const [email, setEmail] = useState("");
+  const navegar = useNavigate();
+
+  // Quem já tem sessão válida não precisa ver esta tela.
+  useEffect(() => {
+    if (autenticado) navegar(rotaInicio(), { replace: true });
+  }, [autenticado, navegar]);
+
+  // Entrou mas não terminou o cadastro (ou voltou pelo link do e-mail): segue
+  // de onde parou, em vez de recomeçar.
+  useEffect(() => {
+    if (precisaCompletarCadastro) setPasso("dados");
+  }, [precisaCompletarCadastro]);
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col px-5 pb-10 pt-10">
       <header className="mb-8 flex flex-col items-center gap-5 text-center">
         <Logo className="h-9" />
-        <div>
-          <h1 className="text-2xl font-bold leading-tight">
-            Tudo que o motoboy precisa,
-            <br />
-            <span className="text-mint">em um só lugar</span>
-          </h1>
-        </div>
+        <h1 className="text-2xl font-bold leading-tight">
+          Tudo que o motoboy precisa,
+          <br />
+          <span className="text-mint">em um só lugar</span>
+        </h1>
       </header>
 
-      {passo === "boas-vindas" && <BoasVindas onIr={setPasso} />}
-      {passo === "cadastro" && <FormularioCadastro onVoltar={() => setPasso("boas-vindas")} />}
-      {passo === "entrar" && <FormularioEntrar onVoltar={() => setPasso("boas-vindas")}
-                                               onCriarConta={() => setPasso("cadastro")} />}
+      {!configurado && (
+        <Aviso tom="atencao" titulo="Sem servidor configurado">
+          Este app foi publicado sem a ligação com o servidor, então não dá para criar conta
+          agora. Nada aqui é inventado para contornar isso.
+        </Aviso>
+      )}
+
+      {carregando ? (
+        <Card><Carregando texto="Verificando sua sessão…" /></Card>
+      ) : (
+        <>
+          {passo === "boas-vindas" && <BoasVindas onEntrar={() => setPasso("email")} />}
+          {passo === "email" && (
+            <PedirEmail email={email} setEmail={setEmail}
+                        onVoltar={() => setPasso("boas-vindas")}
+                        onEnviado={() => setPasso("codigo")} />
+          )}
+          {passo === "codigo" && (
+            <PedirCodigo email={email} onVoltar={() => setPasso("email")} />
+          )}
+          {passo === "dados" && <SeusDados />}
+        </>
+      )}
     </div>
   );
 }
 
-function BoasVindas({ onIr }: { onIr: (p: Passo) => void }) {
+function BoasVindas({ onEntrar }: { onEntrar: () => void }) {
   return (
     <div className="flex flex-1 flex-col">
       <ul className="space-y-3">
@@ -65,23 +103,138 @@ function BoasVindas({ onIr }: { onIr: (p: Passo) => void }) {
       </ul>
 
       <div className="mt-auto space-y-3 pt-8">
-        <button className="btn-primary w-full" onClick={() => onIr("cadastro")}>
-          Criar minha conta
+        <button className="btn-primary w-full" onClick={onEntrar} disabled={!configurado}>
+          Começar
         </button>
-        <button className="btn-ghost w-full" onClick={() => onIr("entrar")}>
-          Já tenho conta
-        </button>
+        <p className="text-center text-xs leading-relaxed text-ink-faint">
+          Criar conta e entrar são a mesma coisa aqui: você informa o e-mail e recebe um
+          código. Sem senha para decorar.
+        </p>
       </div>
     </div>
   );
 }
 
-function FormularioCadastro({ onVoltar }: { onVoltar: () => void }) {
-  const { cadastrar } = usePerfil();
+function PedirEmail({ email, setEmail, onVoltar, onEnviado }: {
+  email: string; setEmail: (v: string) => void; onVoltar: () => void; onEnviado: () => void;
+}) {
+  const { enviarCodigo } = usePerfil();
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+  const valido = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
+  return (
+    <form
+      className="flex flex-1 flex-col"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!valido) return setErro("Confira o e-mail digitado.");
+        setEnviando(true);
+        setErro("");
+        const r = await enviarCodigo(email);
+        setEnviando(false);
+        if (r.estado === "ok") onEnviado();
+        else setErro(r.erro);
+      }}
+    >
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold">Seu e-mail</h2>
+          <button type="button" className="btn-ghost btn-sm" onClick={onVoltar}>Voltar</button>
+        </div>
+        <Campo rotulo="E-mail" obrigatorio erro={erro}
+               ajuda="Mandamos um código de 6 dígitos para confirmar que é você">
+          <input className="input" type="email" autoComplete="email" autoFocus
+                 inputMode="email" value={email}
+                 onChange={(ev) => { setEmail(ev.target.value); setErro(""); }}
+                 placeholder="voce@email.com" />
+        </Campo>
+      </Card>
+
+      <div className="mt-auto space-y-3 pt-6">
+        <button className="btn-primary w-full" type="submit" disabled={enviando || !valido}>
+          {enviando ? "Enviando…" : "Receber código"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function PedirCodigo({ email, onVoltar }: { email: string; onVoltar: () => void }) {
+  const { confirmarCodigo, enviarCodigo } = usePerfil();
+  const [codigo, setCodigo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [reenviado, setReenviado] = useState(false);
+
+  return (
+    <form
+      className="flex flex-1 flex-col"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setEnviando(true);
+        setErro("");
+        const r = await confirmarCodigo(email, codigo);
+        setEnviando(false);
+        // Deu certo: o PerfilProvider abre a sessão e a Entrada segue para os
+        // dados (ou para o início, se o cadastro já estava completo).
+        if (r.estado === "erro") setErro(r.erro);
+      }}
+    >
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold">Código enviado</h2>
+          <button type="button" className="btn-ghost btn-sm" onClick={onVoltar}>Trocar e-mail</button>
+        </div>
+        <p className="text-sm text-ink-muted">
+          Enviamos 6 dígitos para <span className="font-medium text-ink">{email}</span>. Pode
+          chegar na caixa de spam.
+        </p>
+        <Campo rotulo="Código" obrigatorio erro={erro}>
+          <input className="input text-center font-display text-2xl tracking-[0.4em]"
+                 inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={6}
+                 value={codigo}
+                 onChange={(ev) => { setCodigo(ev.target.value.replace(/\D/g, "")); setErro(""); }}
+                 placeholder="000000" />
+        </Campo>
+      </Card>
+
+      <div className="mt-auto space-y-3 pt-6">
+        <button className="btn-primary w-full" type="submit"
+                disabled={enviando || codigo.length < 6}>
+          {enviando ? "Conferindo…" : "Entrar"}
+        </button>
+        {reenviado ? (
+          <Aviso tom="ok">Código novo enviado.</Aviso>
+        ) : (
+          <button className="btn-ghost w-full" type="button"
+                  onClick={async () => {
+                    const r = await enviarCodigo(email);
+                    if (r.estado === "ok") setReenviado(true);
+                    else setErro(r.erro);
+                  }}>
+            Não recebi, enviar de novo
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Os dados que faltam depois de entrar. CPF e nome são do cadastro no app;
+ * ainda não são KYC — a verificação de identidade acontece na jornada do
+ * produto, com fornecedor contratado.
+ */
+function SeusDados() {
+  const { cadastrar, perfil, sair } = usePerfil();
   const navegar = useNavigate();
-  const [f, setF] = useState({ nome: "", cpf: "", nascimento: "", celular: "", email: "" });
+  const [f, setF] = useState({ nome: perfil.nome, cpf: perfil.cpf,
+                               nascimento: perfil.nascimento, celular: perfil.celular });
   const [aceito, setAceito] = useState(false);
   const [tocado, setTocado] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
 
   const d = (chave: keyof typeof f, valor: string) => setF((a) => ({ ...a, [chave]: valor }));
 
@@ -91,26 +244,34 @@ function FormularioCadastro({ onVoltar }: { onVoltar: () => void }) {
     nascimento: f.nascimento && idade(f.nascimento) < 18 ? "Precisa ter 18 anos" : "",
     celular: f.celular.replace(/\D/g, "").length < 10 ? "Celular com DDD" : "",
   };
-  const completo =
-    f.nome && f.cpf && f.nascimento && f.celular &&
-    !Object.values(erros).some(Boolean) && aceito;
+  const completo = f.nome && f.cpf && f.nascimento && f.celular
+                   && !Object.values(erros).some(Boolean) && aceito;
 
   return (
     <form
       className="flex flex-1 flex-col"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         setTocado(true);
         if (!completo) return;
-        cadastrar(f);
-        navegar(rotaInicio(), { replace: true });
+        setSalvando(true);
+        setErro("");
+        const r = await cadastrar({ ...f, aceitouLgpd: aceito });
+        setSalvando(false);
+        if (r.estado === "ok") navegar(rotaInicio(), { replace: true });
+        else setErro(r.erro);
       }}
     >
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold">Criar conta</h2>
-          <button type="button" className="btn-ghost btn-sm" onClick={onVoltar}>Voltar</button>
+          <h2 className="font-bold">Seus dados</h2>
+          <button type="button" className="btn-ghost btn-sm" onClick={() => void sair()}>
+            Sair
+          </button>
         </div>
+        <p className="text-sm text-ink-muted">
+          Entrou como <span className="font-medium text-ink">{perfil.email}</span>.
+        </p>
 
         <Campo rotulo="Nome completo" obrigatorio erro={tocado ? erros.nome : ""}>
           <input className="input" autoComplete="name" value={f.nome}
@@ -131,66 +292,24 @@ function FormularioCadastro({ onVoltar }: { onVoltar: () => void }) {
                    placeholder="(11) 90000-0000" />
           </Campo>
         </div>
-        <Campo rotulo="E-mail" ajuda="Para avisos de cobrança e contrato">
-          <input className="input" type="email" autoComplete="email" value={f.email}
-                 onChange={(e) => d("email", e.target.value)} />
-        </Campo>
 
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[.03] p-4">
-          <input type="checkbox" checked={aceito} className="mt-0.5 h-5 w-5 shrink-0 accent-[#2DD4A8]"
+          <input type="checkbox" checked={aceito}
+                 className="mt-0.5 h-5 w-5 shrink-0 accent-[#2DD4A8]"
                  onChange={(e) => setAceito(e.target.checked)} />
           <span className="text-sm text-ink-muted">
             Aceito os termos de uso e autorizo o tratamento dos meus dados, nos termos da LGPD.
+            Você pode apagar sua conta e todos os seus dados quando quiser, no Perfil.
           </span>
         </label>
       </Card>
 
       <div className="mt-auto space-y-3 pt-6">
-        {tocado && !completo && <Aviso tom="erro">Confira os campos acima para continuar.</Aviso>}
-        <button className="btn-primary w-full" type="submit">Criar conta</button>
-        <p className="text-center text-xs leading-relaxed text-ink-faint">
-          Enquanto o login por SMS não entra no ar, seu cadastro fica guardado neste aparelho.
-        </p>
-      </div>
-    </form>
-  );
-}
-
-function FormularioEntrar({ onVoltar, onCriarConta }: {
-  onVoltar: () => void; onCriarConta: () => void;
-}) {
-  const { entrar } = usePerfil();
-  const navegar = useNavigate();
-  const [cpf, setCpf] = useState("");
-  const [erro, setErro] = useState("");
-
-  return (
-    <form
-      className="flex flex-1 flex-col"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (entrar(cpf)) navegar(rotaInicio(), { replace: true });
-        else setErro("Não achamos esse CPF neste aparelho.");
-      }}
-    >
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold">Entrar</h2>
-          <button type="button" className="btn-ghost btn-sm" onClick={onVoltar}>Voltar</button>
-        </div>
-        <Campo rotulo="Seu CPF" obrigatorio erro={erro}>
-          <input className="input" inputMode="numeric" autoFocus value={mascaraCpf(cpf)}
-                 onChange={(e) => { setCpf(e.target.value); setErro(""); }}
-                 placeholder="000.000.000-00" />
-        </Campo>
-      </Card>
-
-      <div className="mt-auto space-y-3 pt-6">
-        <button className="btn-primary w-full" type="submit" disabled={!cpfValido(cpf)}>
-          Entrar
-        </button>
-        <button className="btn-ghost w-full" type="button" onClick={onCriarConta}>
-          Ainda não tenho conta
+        {erro && <Aviso tom="erro">{erro}</Aviso>}
+        {tocado && !completo && !erro
+          && <Aviso tom="erro">Confira os campos acima para continuar.</Aviso>}
+        <button className="btn-primary w-full" type="submit" disabled={salvando}>
+          {salvando ? "Criando…" : "Criar minha conta"}
         </button>
       </div>
     </form>

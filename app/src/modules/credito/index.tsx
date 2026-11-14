@@ -12,9 +12,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Aviso, Campo, Card, Carregando, Chip, Icone, SecaoTitulo, Vazio } from "@/components/ui";
-import { api, comFallback } from "@/lib/api";
+import { ErroServidor, funcao, supabase } from "@/lib/supabase";
 import { brl, paraNumero, pct } from "@/lib/format";
-import { usePerfil } from "@/platform/PerfilProvider";
 import { rendaParaCredito, resumo as carregarResumo, type Resumo } from "@/platform/meusDados";
 import type { ModuleDefinition, ModuleProps } from "@/platform/registry";
 import type { ProdutoCredito } from "@/platform/types";
@@ -50,7 +49,6 @@ const MOTIVOS: Record<string, string> = {
 };
 
 function CreditoTela(_: ModuleProps) {
-  const { perfil } = usePerfil();
   const [produtos, setProdutos] = useState<ProdutoCredito[] | null>(null);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -58,22 +56,15 @@ function CreditoTela(_: ModuleProps) {
 
   const carregar = useCallback(async () => {
     setCarregando(true);
-    setResumo(await carregarResumo(perfil.cpf, 6));
-    let offline = false;
-    const d = await comFallback(
-      () => api.get<{ produtos: ProdutoCredito[] }>("/admin/produtos-credito"),
-      () => {
-        offline = true;
-        return { produtos: [] as ProdutoCredito[] };
-      },
-    ).catch(() => {
-      offline = true;
-      return { produtos: [] as ProdutoCredito[] };
-    });
-    setSemServidor(offline);
-    setProdutos(d.produtos.filter((p) => p.ativo));
+    setResumo(await carregarResumo(6));
+    // O catálogo é lido do banco: quem cadastra produto é o admin, e a política
+    // que aparece aqui é exatamente a que vai rodar na proposta.
+    const { data, error } = await supabase
+      .from("produtos_credito").select("*").eq("ativo", true).order("nome");
+    setSemServidor(!!error);
+    setProdutos((data ?? []) as ProdutoCredito[]);
     setCarregando(false);
-  }, [perfil.cpf]);
+  }, []);
 
   useEffect(() => {
     void carregar();
@@ -112,7 +103,7 @@ function CreditoTela(_: ModuleProps) {
       </Card>
 
       {produtos.map((p) => (
-        <ProdutoSimulavel key={p.id} produto={p} cpf={perfil.cpf} />
+        <ProdutoSimulavel key={p.id} produto={p} />
       ))}
 
       <Card>
@@ -127,7 +118,7 @@ function CreditoTela(_: ModuleProps) {
   );
 }
 
-function ProdutoSimulavel({ produto, cpf }: { produto: ProdutoCredito; cpf: string }) {
+function ProdutoSimulavel({ produto }: { produto: ProdutoCredito }) {
   const [aberto, setAberto] = useState(false);
   const [garantia, setGarantia] = useState("");
   const [prazo, setPrazo] = useState(String(produto.prazo_max));
@@ -140,14 +131,14 @@ function ProdutoSimulavel({ produto, cpf }: { produto: ProdutoCredito; cpf: stri
     setRodando(true);
     setErro("");
     try {
-      setR(await api.post<Simulacao>(`/me/simular/${produto.id}`, {
-        cpf, parcelas: Number(prazo) || null,
+      setR(await funcao<Simulacao>("simular", {
+        produto_id: produto.id,
+        parcelas: Number(prazo) || null,
         valor_garantia: paraNumero(garantia),
       }));
     } catch (e: any) {
-      const detalhe = e?.corpo?.detail ?? e?.message;
-      setErro(typeof detalhe === "string" ? detalhe
-              : detalhe?.mensagem ?? "não deu para simular agora");
+      setErro(e instanceof ErroServidor ? e.message
+              : "O servidor não respondeu. Tente de novo em instantes.");
     } finally {
       setRodando(false);
     }

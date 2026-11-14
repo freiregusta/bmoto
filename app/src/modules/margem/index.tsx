@@ -31,7 +31,7 @@ function MargemTela(_: ModuleProps) {
   const recarregar = useCallback(async () => {
     setCarregando(true);
     setCustos(custosLocais());
-    setResumo(await carregarResumo(perfil.cpf, 6));
+    setResumo(await carregarResumo(6));
     setCarregando(false);
   }, [perfil.cpf]);
 
@@ -75,7 +75,7 @@ function MargemTela(_: ModuleProps) {
         <EditorCustos
           inicial={custos}
           onSalvar={async (c) => {
-            await salvarCustos(perfil.cpf, c);
+            await salvarCustos(c);
             await recarregar();
             setAba("resultado");
           }}
@@ -309,7 +309,7 @@ function MargemResumo({ modulo }: ModuleProps) {
   const [r, setR] = useState<Resumo | null>(null);
   useEffect(() => {
     let vivo = true;
-    void carregarResumo(perfil.cpf, 3).then((x) => vivo && setR(x));
+    void carregarResumo(3).then((x) => vivo && setR(x));
     return () => { vivo = false; };
   }, [perfil.cpf]);
 

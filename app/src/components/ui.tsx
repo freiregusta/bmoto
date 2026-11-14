@@ -51,9 +51,10 @@ export function Carregando({ texto = "Carregando…" }: { texto?: string }) {
   );
 }
 
-export function Aviso({ tom = "info", titulo, children }: {
+export function Aviso({ tom = "info", titulo, className = "", children }: {
   tom?: "info" | "erro" | "atencao" | "ok";
   titulo?: string;
+  className?: string;
   children: ReactNode;
 }) {
   const cfg = {
@@ -63,7 +64,8 @@ export function Aviso({ tom = "info", titulo, children }: {
     ok: { cls: "border-mint/35 bg-mint/10 text-ink", icone: "CheckCircle2" },
   }[tom];
   return (
-    <div className={`flex gap-3 rounded-xl border p-4 text-sm ${cfg.cls}`} role={tom === "erro" ? "alert" : undefined}>
+    <div className={`flex gap-3 rounded-xl border p-4 text-sm ${cfg.cls} ${className}`}
+         role={tom === "erro" ? "alert" : undefined}>
       <Icone nome={cfg.icone} className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="space-y-1">
         {titulo && <p className="font-semibold text-ink">{titulo}</p>}

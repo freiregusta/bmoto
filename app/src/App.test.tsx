@@ -10,8 +10,15 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// O backend real é trocado por um em memória, com a mesma forma: sessão,
+// tabelas por titular e edge functions que não respondem — porque é o caminho
+// sem servidor que estes testes existem para provar.
+vi.mock("@/lib/supabase", () => import("./test/supabaseFalso"));
+
 import App from "./App";
+import { entrarFalso, linhasFalsas, resetarFalso, semearFalso } from "./test/supabaseFalso";
 
 const abrir = (rota: string) =>
   render(
@@ -20,13 +27,14 @@ const abrir = (rota: string) =>
     </MemoryRouter>,
   );
 
+/** Uma pessoa já logada e com cadastro completo, como quem volta ao app. */
 function comCadastro(nome = "Carlos Souza") {
-  localStorage.setItem(
-    "bmoto.perfil",
-    JSON.stringify({ nome, cpf: "12345678909", nascimento: "1995-03-10",
-                     celular: "(11) 99999-0000", email: "", cnpjMei: null,
-                     score: 640, cadastrado: true }),
-  );
+  const id = entrarFalso();
+  semearFalso("perfis", [{
+    user_id: id, nome, cpf: "12345678909", nascimento: "1995-03-10",
+    celular: "11999990000", cnpj_mei: null,
+    lgpd_aceite_em: "2026-11-01T12:00:00Z", lgpd_versao: "2026-11",
+  }]);
 }
 
 function comGanhos(meses = [["2026-09", 3000], ["2026-10", 3200], ["2026-11", 3400]] as const) {
@@ -42,29 +50,55 @@ function comCustos() {
   }));
 }
 
+beforeEach(() => resetarFalso());
+
 describe("primeira vez no app", () => {
-  it("quem acabou de instalar cai no cadastro", async () => {
+  it("quem acabou de instalar cai na entrada", async () => {
     abrir("/app");
-    expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
+    expect(await screen.findByRole("button", { name: "Começar" })).toBeDefined();
     expect(screen.queryByText("O que já funciona")).toBeNull();
   });
 
-  it("nenhuma tela abre sem cadastro", async () => {
+  it("nenhuma tela abre sem conta", async () => {
     abrir("/app/ganhos");
-    expect(await screen.findByRole("button", { name: "Criar minha conta" })).toBeDefined();
+    expect(await screen.findByRole("button", { name: "Começar" })).toBeDefined();
   });
 
-  it("cadastro completo entra com o nome da pessoa", async () => {
+  it("e-mail, código e dados criam a conta de verdade", async () => {
     const usuario = userEvent.setup();
     abrir("/app");
-    await usuario.click(await screen.findByRole("button", { name: "Criar minha conta" }));
-    await usuario.type(screen.getByPlaceholderText("Como no documento"), "Carlos Souza");
+
+    await usuario.click(await screen.findByRole("button", { name: "Começar" }));
+    await usuario.type(screen.getByPlaceholderText("voce@email.com"), "carlos@teste.local");
+    await usuario.click(screen.getByRole("button", { name: "Receber código" }));
+
+    await usuario.type(await screen.findByPlaceholderText("000000"), "123456");
+    await usuario.click(screen.getByRole("button", { name: "Entrar" }));
+
+    await usuario.type(await screen.findByPlaceholderText("Como no documento"), "Carlos Souza");
     await usuario.type(screen.getByPlaceholderText("000.000.000-00"), "12345678909");
     await usuario.type(screen.getByPlaceholderText("(11) 90000-0000"), "11988887777");
     await usuario.type(document.querySelector('input[type="date"]')!, "1995-03-10");
     await usuario.click(screen.getByRole("checkbox"));
-    await usuario.click(screen.getByRole("button", { name: "Criar conta" }));
+    await usuario.click(screen.getByRole("button", { name: "Criar minha conta" }));
+
     expect(await screen.findByRole("heading", { name: "Carlos" })).toBeDefined();
+    // O aceite da LGPD fica registrado, com versão — é prova, não caixinha.
+    const perfil = linhasFalsas("perfis")[0];
+    expect(perfil.cpf).toBe("12345678909");
+    expect(perfil.lgpd_aceite_em).toBeTruthy();
+    expect(perfil.lgpd_versao).toBe("2026-11");
+  });
+
+  it("código errado não abre a conta", async () => {
+    const usuario = userEvent.setup();
+    abrir("/app");
+    await usuario.click(await screen.findByRole("button", { name: "Começar" }));
+    await usuario.type(screen.getByPlaceholderText("voce@email.com"), "carlos@teste.local");
+    await usuario.click(screen.getByRole("button", { name: "Receber código" }));
+    await usuario.type(await screen.findByPlaceholderText("000000"), "000000");
+    await usuario.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText(/Código inválido ou expirado/)).toBeDefined();
   });
 });
 

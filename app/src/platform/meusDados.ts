@@ -2,16 +2,20 @@
  * meusDados.ts — os ganhos e custos do entregador.
  *
  * Dado real e dele: o que recebeu em cada app, quantos km rodou, quanto gasta.
- * Guarda no aparelho e sincroniza com o servidor (`/me/*`) quando ele responde.
- * Se não responder, continua funcionando — e diz que não sincronizou, em vez
- * de fingir.
+ * A verdade fica no banco (Supabase, com RLS — ninguém alcança a linha de
+ * outro), e o aparelho guarda uma cópia para o app abrir e funcionar sem
+ * sinal. Quando não dá para gravar no servidor, a tela diz que ficou só no
+ * aparelho, em vez de fingir que subiu.
  *
- * O cálculo de margem existe nos dois lados (aqui e em `plataforma/ganhos.py`)
- * com as MESMAS fórmulas, testadas em ambos. Com servidor, manda o número
- * dele; sem servidor, calcula aqui.
+ * A conta da margem é feita **no servidor** (edge function `resumo`). O
+ * cálculo local existe apenas como espelho para o modo sem conexão, e já
+ * divergiu uma vez: o app rateava o custo fixo por dia, o servidor
+ * multiplicava pelos meses lançados. O servidor está certo, e é dele o número
+ * sempre que ele responde.
  */
 
-import { api, comFallback } from "@/lib/api";
+import { comFallback, configurado, funcao, SemBackend, supabase, usuarioId }
+  from "@/lib/supabase";
 import { custoPorKm, type Parametros } from "@/modules/margem/calculo";
 
 export interface Lancamento {
@@ -60,6 +64,7 @@ export interface Resumo {
   por_competencia?: Array<{ competencia: string; bruto: number; km: number;
                            corridas: number; horas: number; apps: string[] }>;
   custos_informados: boolean;
+  limite_mei_ano?: number;
   margem: null | {
     custo_por_km: { combustivel: number; manutencao: number; depreciacao: number; total: number };
     custo_variavel: number;
@@ -78,6 +83,8 @@ export interface Resumo {
 
 const CHAVE_LANC = "bmoto.ganhos";
 const CHAVE_CUSTOS = "bmoto.custos";
+
+const CAMPOS_GANHO = "app, competencia, bruto, corridas, km, horas, origem";
 
 function lerLocal<T>(chave: string, padrao: T): T {
   try {
@@ -102,58 +109,124 @@ export const custosLocais = (): Custos => ({ ...CUSTOS_VAZIOS, ...lerLocal(CHAVE
 export const custosInformados = (c: Custos): boolean =>
   c.consumo_km_l > 0 && c.preco_combustivel > 0;
 
-/** Lança (ou corrige) um período. Grava local e tenta o servidor. */
-export async function lancar(cpf: string, l: Lancamento): Promise<{ sincronizado: boolean }> {
+const numero = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+/** Normaliza o que vem do Postgres (numeric pode chegar como texto). */
+const doBanco = (l: any): Lancamento => ({
+  app: String(l.app), competencia: String(l.competencia),
+  bruto: numero(l.bruto), corridas: numero(l.corridas),
+  km: numero(l.km), horas: numero(l.horas), origem: l.origem ?? undefined,
+});
+
+/**
+ * O que a pessoa já lançou. Busca no servidor e espelha no aparelho; sem
+ * servidor, devolve a cópia local e avisa que não sincronizou.
+ */
+export async function lancamentos(): Promise<{ itens: Lancamento[]; sincronizado: boolean }> {
+  const local = () => ({
+    itens: [...lancamentosLocais()].sort((a, b) => b.competencia.localeCompare(a.competencia)),
+    sincronizado: false,
+  });
+  if (!configurado || !(await usuarioId())) return local();
+
+  const { data, error } = await supabase
+    .from("ganhos").select(CAMPOS_GANHO)
+    .order("competencia", { ascending: false }).order("app");
+  if (error || !data) return local();
+
+  const itens = data.map(doBanco);
+  gravarLocal(CHAVE_LANC, itens);
+  return { itens, sincronizado: true };
+}
+
+/** Lança (ou corrige) um período. Relançar o mesmo app e mês substitui. */
+export async function lancar(l: Lancamento): Promise<{ sincronizado: boolean }> {
   const atuais = lancamentosLocais().filter(
     (x) => !(x.app === l.app && x.competencia === l.competencia),
   );
   gravarLocal(CHAVE_LANC, [...atuais, l]);
-  return { sincronizado: await tentar(() => api.post("/me/ganhos", { cpf, ...l })) };
+
+  const u = await usuarioId();
+  if (!u) return { sincronizado: false };
+  const { error } = await supabase.from("ganhos").upsert({
+    user_id: u, app: l.app, competencia: l.competencia,
+    bruto: l.bruto, corridas: l.corridas || 0, km: l.km || 0, horas: l.horas || 0,
+    origem: l.origem ?? "declarado",
+  }, { onConflict: "user_id,app,competencia" });
+  return { sincronizado: !error };
 }
 
-export async function apagarLancamento(cpf: string, app: string, competencia: string) {
+export async function apagarLancamento(app: string, competencia: string): Promise<void> {
   gravarLocal(
     CHAVE_LANC,
     lancamentosLocais().filter((x) => !(x.app === app && x.competencia === competencia)),
   );
-  await tentar(() => api.del(`/me/ganhos/${app}/${competencia}?cpf=${cpf}`));
+  const u = await usuarioId();
+  if (!u) return;
+  await supabase.from("ganhos").delete()
+    .eq("user_id", u).eq("app", app).eq("competencia", competencia);
 }
 
-export async function salvarCustos(cpf: string, c: Custos): Promise<{ sincronizado: boolean }> {
+/** Os custos guardados. Servidor primeiro; sem ele, a cópia do aparelho. */
+export async function custos(): Promise<{ valores: Custos; sincronizado: boolean }> {
+  if (!configurado || !(await usuarioId()))
+    return { valores: custosLocais(), sincronizado: false };
+  const { data, error } = await supabase.from("custos").select("*").maybeSingle();
+  if (error) return { valores: custosLocais(), sincronizado: false };
+  if (!data) return { valores: custosLocais(), sincronizado: true };
+
+  const valores = { ...CUSTOS_VAZIOS } as Custos;
+  for (const chave of Object.keys(CUSTOS_VAZIOS) as Array<keyof Custos>)
+    valores[chave] = numero((data as any)[chave]);
+  gravarLocal(CHAVE_CUSTOS, valores);
+  return { valores, sincronizado: true };
+}
+
+export async function salvarCustos(c: Custos): Promise<{ sincronizado: boolean }> {
   gravarLocal(CHAVE_CUSTOS, c);
-  return { sincronizado: await tentar(() => api.put(`/me/custos?cpf=${cpf}`, c)) };
+  const u = await usuarioId();
+  if (!u) return { sincronizado: false };
+  const { error } = await supabase.from("custos")
+    .upsert({ user_id: u, ...c }, { onConflict: "user_id" });
+  return { sincronizado: !error };
 }
 
-async function tentar(fn: () => Promise<unknown>): Promise<boolean> {
-  try {
-    await fn();
-    return true;
-  } catch {
-    return false;
-  }
+/** Registra interesse num produto que ainda não existe. Lista de espera real. */
+export async function registrarInteresse(produto: string, observacao = ""):
+  Promise<{ ok: boolean }> {
+  const u = await usuarioId();
+  if (!u) return { ok: false };
+  const { error } = await supabase.from("interesses")
+    .upsert({ user_id: u, produto, observacao }, { onConflict: "user_id,produto" });
+  return { ok: !error };
 }
 
 /**
- * O resumo que as telas mostram. Prefere o servidor; sem ele, calcula local
- * com as mesmas fórmulas. Nos dois casos, só sobre dado lançado.
+ * O resumo que as telas mostram: renda, custos e margem. A conta é do
+ * servidor; sem servidor, o espelho local — e aí `sincronizado` é falso para
+ * a tela poder dizer isso.
  */
-export async function resumo(cpf: string, meses = 3): Promise<Resumo> {
+export async function resumo(meses = 3): Promise<Resumo> {
   const local = () => ({ ...resumoLocal(meses), sincronizado: false });
+  if (!configurado) return local();
   const doServidor = await comFallback(
-    () => api.get<Resumo>(`/me/resumo?cpf=${cpf}&meses=${meses}`),
+    () => funcao<Resumo>(`resumo?meses=${meses}`, undefined, "GET"),
     local,
-  ).catch(local);
+  ).catch((e) => {
+    if (e instanceof SemBackend) return local();
+    throw e;
+  });
   return { ...doServidor, sincronizado: doServidor.sincronizado !== false };
 }
 
-/** Mesmo cálculo do backend, para quando ele não responde. */
+/** Mesmo cálculo do servidor, para quando ele não responde. */
 export function resumoLocal(meses = 3): Resumo {
   const todos = [...lancamentosLocais()].sort((a, b) =>
     b.competencia.localeCompare(a.competencia));
   const competencias = [...new Set(todos.map((l) => l.competencia))].slice(0, meses);
   const lancs = todos.filter((l) => competencias.includes(l.competencia));
-  const custos = custosLocais();
-  const informados = custosInformados(custos);
+  const c = custosLocais();
+  const informados = custosInformados(c);
 
   if (lancs.length === 0)
     return { tem_dados: false, meses_lancados: 0, custos_informados: informados, margem: null };
@@ -174,13 +247,13 @@ export function resumoLocal(meses = 3): Resumo {
     d.km = Math.round((d.km + (l.km || 0)) * 10) / 10;
   });
 
-  const por_competencia = competencias.map((c) => {
-    const doMes = lancs.filter((l) => l.competencia === c);
+  const por_competencia = competencias.map((comp) => {
+    const doMes = lancs.filter((l) => l.competencia === comp);
     const s = (f: (l: Lancamento) => number) =>
       Math.round(doMes.reduce((a, l) => a + (f(l) || 0), 0) * 100) / 100;
-    return { competencia: c, bruto: s((l) => l.bruto), km: s((l) => l.km),
+    return { competencia: comp, bruto: s((l) => l.bruto), km: s((l) => l.km),
              corridas: Math.round(s((l) => l.corridas)), horas: s((l) => l.horas),
-             apps: [...new Set(doMes.map((l) => l.app))] };
+             apps: [...new Set(doMes.map((l) => l.app))].sort() };
   });
 
   const base: Resumo = {
@@ -193,20 +266,20 @@ export function resumoLocal(meses = 3): Resumo {
   if (!informados) return base;
 
   const params: Parametros = {
-    consumo: custos.consumo_km_l, precoCombustivel: custos.preco_combustivel,
-    custoOleo: custos.custo_oleo, kmTrocaOleo: custos.km_troca_oleo,
-    custoPneus: custos.custo_pneus, kmPneus: custos.km_pneus,
-    custoRevisao: custos.custo_revisao, kmRevisao: custos.km_revisao,
-    valorMoto: custos.valor_moto, vidaUtilKm: custos.vida_util_km,
-    dasMei: custos.das_mei, parcelaMoto: custos.parcela_moto,
-    seguro: custos.seguro, outrosFixos: custos.outros_fixos,
+    consumo: c.consumo_km_l, precoCombustivel: c.preco_combustivel,
+    custoOleo: c.custo_oleo, kmTrocaOleo: c.km_troca_oleo,
+    custoPneus: c.custo_pneus, kmPneus: c.km_pneus,
+    custoRevisao: c.custo_revisao, kmRevisao: c.km_revisao,
+    valorMoto: c.valor_moto, vidaUtilKm: c.vida_util_km,
+    dasMei: c.das_mei, parcelaMoto: c.parcela_moto,
+    seguro: c.seguro, outrosFixos: c.outros_fixos,
   };
-  // Mesma conta de `plataforma/ganhos.py`, passo a passo: variável pelo km
-  // rodado, fixo multiplicado pelos meses lançados. Nada de rateio por dias —
-  // foi aqui que as duas pontas divergiram uma vez.
+  // Mesma conta da edge function, passo a passo: variável pelo km rodado,
+  // fixo multiplicado pelos meses lançados. Nada de rateio por dias — foi aqui
+  // que as duas pontas divergiram uma vez.
   const ck = custoPorKm(params);
   const r2 = (v: number) => Math.round(v * 100) / 100;
-  const fixoMensal = custos.das_mei + custos.parcela_moto + custos.seguro + custos.outros_fixos;
+  const fixoMensal = c.das_mei + c.parcela_moto + c.seguro + c.outros_fixos;
   const custoVariavel = r2(ck.custoPorKm * km);
   const custoFixo = r2(fixoMensal * n);
   const custoTotal = r2(custoVariavel + custoFixo);

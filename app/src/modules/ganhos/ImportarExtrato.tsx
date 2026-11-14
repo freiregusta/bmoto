@@ -13,9 +13,8 @@
 
 import { useRef, useState } from "react";
 import { Aviso, Card, Chip, Icone, SecaoTitulo } from "@/components/ui";
-import { api, SemBackend } from "@/lib/api";
+import { ErroServidor, funcao, SemBackend } from "@/lib/supabase";
 import { brl, data as formatarData, pct } from "@/lib/format";
-import { usePerfil } from "@/platform/PerfilProvider";
 import { rotuloCompetencia } from "@/platform/meusDados";
 
 interface Conferencia {
@@ -42,13 +41,11 @@ function mensagemDeErro(e: unknown, padrao: string): string {
   if (e instanceof SemBackend)
     return "O servidor não respondeu. A leitura do extrato acontece lá, então tente de novo "
          + "daqui a pouco — enquanto isso dá para lançar o mês na mão, aqui embaixo.";
-  const detalhe = (e as any)?.corpo?.detail;
-  if (typeof detalhe === "string") return detalhe;
-  return detalhe?.mensagem ?? padrao;
+  if (e instanceof ErroServidor) return e.message;
+  return padrao;
 }
 
 export function ImportarExtrato({ onImportado }: { onImportado: () => void | Promise<void> }) {
-  const { perfil } = usePerfil();
   const [conteudo, setConteudo] = useState("");
   const [nomeArquivo, setNomeArquivo] = useState("");
   const [conferencia, setConferencia] = useState<Conferencia | null>(null);
@@ -61,8 +58,8 @@ export function ImportarExtrato({ onImportado }: { onImportado: () => void | Pro
     setErro("");
     setConferencia(null);
     try {
-      setConferencia(await api.post<Conferencia>("/me/extrato/conferir",
-                                                 { cpf: perfil.cpf, conteudo: texto }));
+      setConferencia(await funcao<Conferencia>("extrato",
+                                               { acao: "conferir", conteudo: texto }));
     } catch (e: any) {
       setErro(mensagemDeErro(e, "não consegui ler este arquivo"));
     } finally {
@@ -74,8 +71,7 @@ export function ImportarExtrato({ onImportado }: { onImportado: () => void | Pro
     setEstado("importando");
     setErro("");
     try {
-      const r = await api.post<Conferencia>("/me/extrato/importar",
-                                            { cpf: perfil.cpf, conteudo });
+      const r = await funcao<Conferencia>("extrato", { acao: "importar", conteudo });
       setConferencia(r);
       setEstado("ok");
       await onImportado();

@@ -12,6 +12,7 @@
 
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./components/Shell";
+import { Carregando } from "./components/ui";
 import { AdminShell } from "./admin/AdminShell";
 import Inicio from "./pages/Inicio";
 import Mais from "./pages/Mais";
@@ -29,17 +30,25 @@ import Jornadas from "./admin/Jornadas";
 import Auditoria from "./admin/Auditoria";
 
 /** Sem cadastro não há app: quem chega primeiro cria a conta. */
+/**
+ * Enquanto a sessão está sendo verificada, ESPERA. Mandar para a entrada antes
+ * disso perde o destino: quem abre um link direto (ou volta pelo link do
+ * e-mail) acabava jogado no início, porque a entrada redireciona quem já está
+ * logado.
+ */
 function ExigeCadastro({ children }: { children: JSX.Element }) {
-  const { autenticado } = usePerfil();
+  const { autenticado, carregando } = usePerfil();
+  if (carregando) return <Carregando texto="Abrindo o seu BMoto…" />;
   return autenticado ? children : <Navigate to={rotaEntrada()} replace />;
 }
 
 export function AppRoutes() {
-  const { autenticado } = usePerfil();
+  const { autenticado, carregando } = usePerfil();
   return (
     <Routes>
       <Route path="entrar"
-             element={autenticado ? <Navigate to={rotaInicio()} replace /> : <Entrada />} />
+             element={!carregando && autenticado
+               ? <Navigate to={rotaInicio()} replace /> : <Entrada />} />
 
       {/* estático vence dinâmico no React Router: /admin não cai em :moduloId */}
       <Route path="admin" element={<ExigeCadastro><AdminShell /></ExigeCadastro>}>

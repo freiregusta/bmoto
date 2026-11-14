@@ -13,17 +13,15 @@ import { Aviso, Campo, Card, Carregando, Chip, Icone, Metrica, SecaoTitulo, Vazi
   from "@/components/ui";
 import { brl, numero, paraNumero } from "@/lib/format";
 import { APPS_CONHECIDOS } from "@/platform/catalogo-local";
-import { usePerfil } from "@/platform/PerfilProvider";
 import {
-  apagarLancamento, competenciaAtual, competenciasRecentes, lancamentosLocais, lancar,
-  resumo as carregarResumo, rotuloCompetencia, type Lancamento, type Resumo,
+  apagarLancamento, competenciaAtual, competenciasRecentes, lancamentos as carregarLancamentos,
+  lancar, resumo as carregarResumo, rotuloCompetencia, type Lancamento, type Resumo,
 } from "@/platform/meusDados";
 import type { ModuleDefinition, ModuleProps } from "@/platform/registry";
 import { rotaModulo } from "@/rotas";
 import { ImportarExtrato } from "./ImportarExtrato";
 
 function GanhosTela(_: ModuleProps) {
-  const { perfil } = usePerfil();
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -31,11 +29,11 @@ function GanhosTela(_: ModuleProps) {
 
   const recarregar = useCallback(async () => {
     setCarregando(true);
-    setLancamentos([...lancamentosLocais()].sort((a, b) =>
-      b.competencia.localeCompare(a.competencia)));
-    setResumo(await carregarResumo(perfil.cpf, 6));
+    const [{ itens }, r] = await Promise.all([carregarLancamentos(), carregarResumo(6)]);
+    setLancamentos(itens);
+    setResumo(r);
     setCarregando(false);
-  }, [perfil.cpf]);
+  }, []);
 
   useEffect(() => {
     void recarregar();
@@ -115,7 +113,7 @@ function GanhosTela(_: ModuleProps) {
           enviando={lancando}
           onLancar={async (l) => {
             setLancando(true);
-            await lancar(perfil.cpf, l);
+            await lancar(l);
             setLancando(false);
             await recarregar();
           }}
@@ -140,7 +138,7 @@ function GanhosTela(_: ModuleProps) {
                 <button className="btn-ghost btn-sm text-danger"
                         aria-label={`Apagar ${nomeApp(l.app)} ${l.competencia}`}
                         onClick={async () => {
-                          await apagarLancamento(perfil.cpf, l.app, l.competencia);
+                          await apagarLancamento(l.app, l.competencia);
                           await recarregar();
                         }}>
                   <Icone nome="Trash2" className="h-3.5 w-3.5" />
@@ -239,13 +237,12 @@ const nomeApp = (slug: string) =>
   APPS_CONHECIDOS.find((a) => a.slug === slug)?.nome ?? slug;
 
 function GanhosResumo({ modulo }: ModuleProps) {
-  const { perfil } = usePerfil();
   const [r, setR] = useState<Resumo | null>(null);
   useEffect(() => {
     let vivo = true;
-    void carregarResumo(perfil.cpf, 3).then((x) => vivo && setR(x));
+    void carregarResumo(3).then((x) => vivo && setR(x));
     return () => { vivo = false; };
-  }, [perfil.cpf]);
+  }, []);
 
   if (!r) return null;
 
